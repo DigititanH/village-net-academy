@@ -15,6 +15,8 @@ All notable changes to this project will be documented in this file.
 - Created decoupled GitHub Actions workflows (`deploy-backend.yml` and `deploy-frontend.yml`) for monorepo-style isolated build and deployment.
 - Added conditional checks (`skip_deploy_on_missing_secrets` and `if` filters) to GitHub Actions to prevent CI pipeline failures when publish profiles are not configured.
 - Modified the frontend API utility to support custom API endpoints via the `VITE_API_URL` environment configuration.
+- Added custom `nginx.conf` routing configuration to rewrite non-file requests to `index.php` on Azure App Service.
+- Updated `startup.sh` startup script to automatically copy and apply the Nginx routing configuration and reload the Nginx service.
 
 ### Modified
 - Updated `Hosting.php` extensions checks and configuration rules to handle `pdo_sqlite` dynamically when running SQLite databases.
