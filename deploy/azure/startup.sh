@@ -9,3 +9,11 @@
 set -e
 mkdir -p /home/site/data/uploads
 chmod -R 775 /home/site/data 2>/dev/null || true
+
+# Apply custom Nginx configuration for routing
+if [ -f "/home/site/wwwroot/deploy/azure/nginx.conf" ]; then
+    echo "Applying custom Nginx configuration..."
+    cp /home/site/wwwroot/deploy/azure/nginx.conf /etc/nginx/sites-available/default
+    # Try reloading nginx using various service commands available in standard App Service images
+    service nginx reload || systemctl reload nginx || nginx -s reload || true
+fi

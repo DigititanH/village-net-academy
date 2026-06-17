@@ -51,6 +51,7 @@ echo "Adding Azure-specific configurations..."
 mkdir -p "$TEMP_DIR/deploy/azure"
 cp "$SCRIPT_DIR/AZURE.md" "$TEMP_DIR/deploy/azure/"
 cp "$SCRIPT_DIR/env.azure.template" "$TEMP_DIR/deploy/azure/"
+cp "$SCRIPT_DIR/nginx.conf" "$TEMP_DIR/deploy/azure/"
 cp "$SCRIPT_DIR/startup.sh" "$TEMP_DIR/"
 
 # Zip it up

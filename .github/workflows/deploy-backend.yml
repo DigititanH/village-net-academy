@@ -33,6 +33,7 @@ jobs:
           mkdir -p backend-release/deploy/azure
           cp deploy/azure/AZURE.md backend-release/deploy/azure/
           cp deploy/azure/env.azure.template backend-release/deploy/azure/
+          cp deploy/azure/nginx.conf backend-release/deploy/azure/
           cp deploy/azure/startup.sh backend-release/startup.sh
 
       - name: Deploy to Azure Web App

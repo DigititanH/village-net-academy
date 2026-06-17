@@ -54,6 +54,7 @@ $azureDeploy = Join-Path $temp "deploy\azure"
 New-Item -ItemType Directory -Path $azureDeploy -Force | Out-Null
 Copy-Item (Join-Path $PSScriptRoot "AZURE.md") $azureDeploy -Force
 Copy-Item (Join-Path $PSScriptRoot "env.azure.template") $azureDeploy -Force
+Copy-Item (Join-Path $PSScriptRoot "nginx.conf") $azureDeploy -Force
 Copy-Item (Join-Path $PSScriptRoot "startup.sh") (Join-Path $temp "startup.sh") -Force
 
 foreach ($zipPath in @($out, $release)) {
