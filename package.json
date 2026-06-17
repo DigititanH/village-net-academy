@@ -1,0 +1,20 @@
+{
+  "name": "village-netacad",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Village NetAcad shop & support platform (PHP API for Afrihost shared hosting)",
+  "scripts": {
+    "install:all": "npm install --prefix frontend",
+    "build": "npm run build --prefix frontend",
+    "validate:routes": "php backend-php/scripts/validate-routes.php",
+    "prepare:deploy": "powershell -ExecutionPolicy Bypass -File deploy/prepare-production.ps1",
+    "migrate": "php backend-php/database/migrate.php",
+    "dev:backend": "php -S localhost:5000 -t backend-php/public backend-php/public/index.php",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "package:afrihost": "powershell -ExecutionPolicy Bypass -File deploy/package-for-upload.ps1",
+    "package:azure": "powershell -ExecutionPolicy Bypass -File deploy/azure/package-for-azure.ps1",
+    "package:azure:sh": "bash deploy/azure/package-for-azure.sh",
+    "deploy:azure": "powershell -ExecutionPolicy Bypass -File deploy/azure/deploy-now.ps1",
+    "start": "php -S localhost:5000 -t backend-php/public backend-php/public/index.php"
+  }
+}

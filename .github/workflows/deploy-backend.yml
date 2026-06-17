@@ -1,0 +1,43 @@
+name: Deploy Backend to Azure App Service
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend-php/**'
+      - '.github/workflows/deploy-backend.yml'
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Prepare Backend Package
+        run: |
+          mkdir -p backend-release
+          
+          # Copy backend-php files
+          cp -r backend-php/* backend-release/
+          
+          # Remove local config and dev DBs
+          rm -f backend-release/.env
+          rm -rf backend-release/database/database.sqlite* 2>/dev/null || true
+          rm -rf backend-release/database.sqlite* 2>/dev/null || true
+          
+          # Copy Azure scripts and docs
+          mkdir -p backend-release/deploy/azure
+          cp deploy/azure/AZURE.md backend-release/deploy/azure/
+          cp deploy/azure/env.azure.template backend-release/deploy/azure/
+          cp deploy/azure/startup.sh backend-release/startup.sh
+
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ secrets.AZURE_WEBAPP_NAME }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: ./backend-release

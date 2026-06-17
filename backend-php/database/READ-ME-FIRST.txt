@@ -1,0 +1,20 @@
+IMPORT IN phpMyAdmin
+====================
+
+Use this file ONLY:
+  PHPMYADMIN-IMPORT-THIS-FILE.sql
+  (same as import.sql)
+
+Steps:
+1. cPanel -> MySQL Databases -> create database + user
+2. phpMyAdmin -> click YOUR database name on the left
+3. Import tab -> Choose File -> PHPMYADMIN-IMPORT-THIS-FILE.sql -> Go
+
+DO NOT import these (they are NOT SQL):
+  backend-php/.env
+  backend-php/.env.database  (deleted - was causing errors)
+
+DO NOT paste into the SQL tab - use Import -> Choose File.
+
+Admin login after import:
+  admin@villagenetacad.com / Admin123!

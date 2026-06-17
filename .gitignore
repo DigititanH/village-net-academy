@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+/frontend/node_modules/
+
+# Production builds and zip packages
+/frontend/dist/
+/village-netacad-azure.zip
+/deploy/azure/release.zip
+/deploy/azure/publish-profile.xml
+
+# Local database files
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+backend-php/database/database.sqlite*
+backend-php/database.sqlite*
+
+# Environment and Secrets
+.env
+.env.local
+.env.*.local
+backend-php/.env
+backend-php/.env.*
+!backend-php/.env.example
+
+# OS files
+.DS_Store
+Thumbs.db
