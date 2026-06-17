@@ -31,7 +31,7 @@ az webapp create \
 az webapp config set \
   --name "$APP_NAME" \
   --resource-group "$RG" \
-  --startup-file "/home/site/wwwroot/startup.sh" \
+  --startup-file "bash /home/site/wwwroot/startup.sh; php-fpm;" \
   --output none
 
 az webapp config appsettings set \
