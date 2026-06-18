@@ -18,6 +18,8 @@ rm -f /home/site/wwwroot/index.html
 if [ -f "/home/site/wwwroot/deploy/azure/nginx.conf" ]; then
     echo "Applying custom Nginx configuration..."
     cp /home/site/wwwroot/deploy/azure/nginx.conf /etc/nginx/sites-available/default
+    mkdir -p /etc/nginx/sites-enabled
+    cp /home/site/wwwroot/deploy/azure/nginx.conf /etc/nginx/sites-enabled/default
     # Try reloading nginx using various service commands available in standard App Service images
     service nginx reload || systemctl reload nginx || nginx -s reload || true
 fi
