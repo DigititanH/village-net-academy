@@ -85,7 +85,7 @@ Template: `deploy/azure/env.azure.template`
 **Startup command** (optional, creates data folders):
 
 ```
-bash /home/site/wwwroot/startup.sh; php-fpm;
+bash /home/site/wwwroot/startup.sh
 ```
 
 ---

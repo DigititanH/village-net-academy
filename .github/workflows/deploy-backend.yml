@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'backend-php/**'
+      - 'deploy/azure/**'
       - '.github/workflows/deploy-backend.yml'
   workflow_dispatch:
 

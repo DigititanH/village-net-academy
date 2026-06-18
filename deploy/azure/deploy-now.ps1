@@ -92,7 +92,7 @@ Invoke-Az @(
     "webapp", "config", "set",
     "--name", $AppName,
     "--resource-group", $ResourceGroup,
-    "--startup-file", "bash /home/site/wwwroot/startup.sh; php-fpm;",
+    "--startup-file", "bash /home/site/wwwroot/startup.sh",
     "--output", "none"
 ) | Out-Null
 
