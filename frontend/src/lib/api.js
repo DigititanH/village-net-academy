@@ -36,4 +36,5 @@ export function getImageUrl(imagePath) {
   return imagePath;
 }
 
+// Trigger build with updated VITE_API_URL
 export default api;
