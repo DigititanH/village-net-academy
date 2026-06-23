@@ -5,6 +5,7 @@ import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import { getReferralCode, setReferralCode } from "../lib/referral";
 import toast from "react-hot-toast";
+import { getImageUrl } from "../lib/api";
 
 export default function Cart() {
   const { items, updateSize, updateQuantity, removeItem, total, loading } = useCart();
@@ -43,7 +44,7 @@ export default function Cart() {
           {items.map((item) => (
             <div key={item.id} className="card flex items-center gap-4">
               <div className="w-20 h-20 bg-white/5 rounded-xl overflow-hidden flex-shrink-0">
-                {item.image ? <img src={item.image} alt={item.name} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-gray-600"><ShoppingCart size={24} /></div>}
+                {item.image ? <img src={getImageUrl(item.image)} alt={item.name} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-gray-600"><ShoppingCart size={24} /></div>}
               </div>
               <div className="flex-1 min-w-0">
                 <h3 className="font-bold truncate">{item.name}</h3>

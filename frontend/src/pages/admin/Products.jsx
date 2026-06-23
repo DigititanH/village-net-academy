@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Plus, Pencil, Trash2, X } from "lucide-react";
-import api from "../../lib/api";
+import api, { getImageUrl } from "../../lib/api";
 import toast from "react-hot-toast";
 
 export default function AdminProducts() {
@@ -66,7 +66,7 @@ export default function AdminProducts() {
               <tr key={p.id} className="border-b dark:border-gray-800">
                 <td className="py-3">
                   {p.image ? (
-                    <img src={p.image} alt={p.name} className="w-12 h-12 rounded-lg object-cover" />
+                    <img src={getImageUrl(p.image)} alt={p.name} className="w-12 h-12 rounded-lg object-cover" />
                   ) : (
                     <div className="w-12 h-12 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-400 text-xs">No img</div>
                   )}

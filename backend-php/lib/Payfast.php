@@ -97,16 +97,11 @@ class Payfast
             $payload[$key] = $trimmed;
         }
 
-        $extra = array_diff(array_keys($payload), self::FIELD_ORDER);
-        sort($extra);
-        $orderedKeys = array_merge(
-            array_values(array_filter(self::FIELD_ORDER, fn ($k) => isset($payload[$k]))),
-            $extra
-        );
+        ksort($payload);
 
         $parts = [];
-        foreach ($orderedKeys as $key) {
-            $parts[] = $key . '=' . self::pfEncode($payload[$key]);
+        foreach ($payload as $key => $val) {
+            $parts[] = $key . '=' . self::pfEncode($val);
         }
         $paramString = implode('&', $parts);
         if ($passphrase !== '') {

@@ -54,6 +54,9 @@ if ($method === 'OPTIONS') {
 if (str_starts_with($path, '/uploads/')) {
     $filename = basename($path);
     $file = Paths::getUploadsDir() . DIRECTORY_SEPARATOR . $filename;
+    if (!is_file($file)) {
+        $file = __DIR__ . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . $filename;
+    }
     if (is_file($file)) {
         $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
         $types = [

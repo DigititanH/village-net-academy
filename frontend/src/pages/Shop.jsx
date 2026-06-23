@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Search, ShoppingCart, Star } from "lucide-react";
-import api from "../lib/api";
+import api, { getImageUrl } from "../lib/api";
 import { useCart } from "../context/CartContext";
 import toast from "react-hot-toast";
 
@@ -94,7 +94,7 @@ export default function Shop() {
                 <Link to={`/shop/${p.slug}`} key={p.id} className="group glass rounded-[2rem] overflow-hidden hover:border-burnt-500/35 transition-all duration-700 hover:-translate-y-3">
                   <div className="aspect-square glass-clear overflow-hidden border-0 shadow-none">
                     {p.image ? (
-                      <img src={p.image} alt={p.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                      <img src={getImageUrl(p.image)} alt={p.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-gray-600">
                         <ShoppingCart size={48} />

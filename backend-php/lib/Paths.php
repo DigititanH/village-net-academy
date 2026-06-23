@@ -22,7 +22,7 @@ class Paths
         if ($custom !== '') {
             return self::resolvePath($custom);
         }
-        return self::backendRoot() . DIRECTORY_SEPARATOR . 'uploads';
+        return self::backendRoot() . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'uploads';
     }
 
     public static function ensureDir(string $dir): void

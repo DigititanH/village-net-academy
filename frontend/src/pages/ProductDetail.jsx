@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { ShoppingCart, Heart, Star, Send } from "lucide-react";
-import api from "../lib/api";
+import api, { getImageUrl } from "../lib/api";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import toast from "react-hot-toast";
@@ -73,7 +73,7 @@ export default function ProductDetail() {
       <div className="max-w-7xl mx-auto">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
           <div className="aspect-square glass rounded-[2rem] overflow-hidden">
-            {product.image ? <img src={product.image} alt={product.name} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-gray-600"><ShoppingCart size={80} /></div>}
+            {product.image ? <img src={getImageUrl(product.image)} alt={product.name} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-gray-600"><ShoppingCart size={80} /></div>}
           </div>
 
           <div>

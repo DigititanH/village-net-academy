@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, X, ShoppingBag, FileText, Tag, ArrowRight } from "lucide-react";
-import api from "../lib/api";
+import api, { getImageUrl } from "../lib/api";
 
 export default function GlobalSearch() {
   const [isOpen, setIsOpen] = useState(false);
@@ -128,7 +128,7 @@ export default function GlobalSearch() {
                 >
                   <div className="w-12 h-12 rounded-xl bg-white/5 border border-white/10 overflow-hidden flex-shrink-0">
                     {p.image ? (
-                      <img src={p.image} alt={p.name} className="w-full h-full object-cover" />
+                      <img src={getImageUrl(p.image)} alt={p.name} className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center"><ShoppingBag size={16} className="text-gray-600" /></div>
                     )}

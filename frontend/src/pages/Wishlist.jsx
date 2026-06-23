@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Heart, ShoppingCart, Trash2 } from "lucide-react";
-import api from "../lib/api";
+import api, { getImageUrl } from "../lib/api";
 import { useCart } from "../context/CartContext";
 import toast from "react-hot-toast";
 
@@ -40,7 +40,7 @@ export default function Wishlist() {
             {items.map((item) => (
               <div key={item.id} className="group glass rounded-[2rem] overflow-hidden hover:border-burnt-500/35 transition-all duration-700 hover:-translate-y-3">
                 <Link to={`/shop/${item.slug}`} className="aspect-square glass-clear block overflow-hidden border-0 shadow-none">
-                  {item.image ? <img src={item.image} alt={item.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" /> : <div className="w-full h-full flex items-center justify-center text-gray-600"><ShoppingCart size={40} /></div>}
+                  {item.image ? <img src={getImageUrl(item.image)} alt={item.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" /> : <div className="w-full h-full flex items-center justify-center text-gray-600"><ShoppingCart size={40} /></div>}
                 </Link>
                 <div className="p-5">
                   <h3 className="font-bold text-lg mb-1">{item.name}</h3>

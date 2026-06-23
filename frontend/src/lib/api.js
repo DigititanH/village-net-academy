@@ -23,4 +23,17 @@ api.interceptors.response.use(
   }
 );
 
+export function getImageUrl(imagePath) {
+  if (!imagePath) return null;
+  if (imagePath.startsWith("http://") || imagePath.startsWith("https://")) {
+    return imagePath;
+  }
+  const apiUrl = import.meta.env.VITE_API_URL || "";
+  if (apiUrl) {
+    const base = apiUrl.replace(/\/api\/?$/, "");
+    return `${base}${imagePath}`;
+  }
+  return imagePath;
+}
+
 export default api;
