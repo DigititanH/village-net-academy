@@ -5,10 +5,11 @@ class SearchController
     private const PAGES = [
         ['title' => 'Home', 'description' => 'Village Netacad - AI Future Hub. Empowering Smart Villages through digital education.', 'path' => '/'],
         ['title' => 'About Us', 'description' => 'Learn about our mission, team, partners and community impact.', 'path' => '/about'],
+        ['title' => 'Courses', 'description' => 'Explore digital skills training and academy registration.', 'path' => '/courses'],
+        ['title' => 'Career', 'description' => 'Join Village NetAcad. View opportunities and apply to our team.', 'path' => '/career'],
         ['title' => 'Shop', 'description' => 'Browse our futuristic store with AI-inspired fashion and merchandise.', 'path' => '/shop'],
         ['title' => 'Donation', 'description' => 'Support the development of AI-powered innovation hubs across Africa.', 'path' => '/donation'],
         ['title' => 'Contact Us', 'description' => 'Get in touch with Village Netacad. Email, phone, location.', 'path' => '/contact'],
-        ['title' => 'Login', 'description' => 'Sign in to your Village Netacad account.', 'path' => '/login'],
         ['title' => 'Register', 'description' => 'Create a new customer or reseller account.', 'path' => '/register'],
         ['title' => 'Cart', 'description' => 'View and manage items in your shopping cart.', 'path' => '/cart'],
         ['title' => 'My Orders', 'description' => 'Track your order history and status.', 'path' => '/my-orders'],
