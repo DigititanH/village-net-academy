@@ -114,6 +114,18 @@ try {
         ], 500);
     }
 
+    $isSchema = stripos($raw, 'Unknown column') !== false
+        || stripos($raw, '42S22') !== false
+        || stripos($raw, '1054') !== false
+        || (stripos($raw, 'Data truncated for column') !== false && stripos($raw, 'role') !== false);
+
+    if ($isProduction && $isSchema) {
+        Response::json([
+            'message' => 'Database schema is out of date. In cPanel Terminal run: cd ~/path/to/backend-php && php scripts/post-deploy.php',
+            'detail' => preg_match('/Unknown column [\'`][^\'`]+[\'`]/i', $raw, $m) ? $m[0] : null,
+        ], 500);
+    }
+
     $message = $isProduction ? 'Internal server error' : $raw;
     Response::json(['message' => $message], 500);
 }

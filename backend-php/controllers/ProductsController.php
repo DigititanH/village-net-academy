@@ -225,8 +225,14 @@ class ProductsController
 
     public static function update(array $params): void
     {
-        Auth::authorize('admin');
-        $body = array_merge(Request::jsonBody(), $_POST);
+        Auth::authorizeAdmin();
+        $json = [];
+        try {
+            $json = Request::jsonBody();
+        } catch (Throwable $e) {
+            $json = [];
+        }
+        $body = array_merge(is_array($json) ? $json : [], $_POST);
         $id = (int) ($params['id'] ?? 0);
         if ($id < 1) {
             Response::error('Invalid product id', 400);
@@ -289,9 +295,9 @@ class ProductsController
             $sqlParams[] = $subcategory;
         }
 
-        if (array_key_exists('stock', $body) && $body['stock'] !== '' && $body['stock'] !== null) {
+        if (array_key_exists('stock', $body)) {
             $fields[] = 'stock = ?';
-            $sqlParams[] = (int) $body['stock'];
+            $sqlParams[] = max(0, (int) $body['stock']);
         }
         if (array_key_exists('sizes', $body)) {
             $sizesValue = ($body['sizes'] === '' || $body['sizes'] === null) ? null : $body['sizes'];

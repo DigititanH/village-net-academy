@@ -34,11 +34,56 @@ class AuthController
         $approvalStatus = 'approved';
         $verificationToken = Request::uuid();
 
-        $result = Database::queryRun(
-            'INSERT INTO registrations (name, role, is_verified, is_approved, academy_name, verification_token) VALUES (?, ?, 0, ?, ?, ?)',
-            [$name, $userRole, $approvalStatus, $userRole === 'academy' ? $academyName : null, $verificationToken]
-        );
+        // Shared hosting often misses ALTERs from newer releases — patch before insert.
+        SchemaEnsure::registrations();
+
+        try {
+            $result = Database::queryRun(
+                'INSERT INTO registrations (name, role, is_verified, is_approved, academy_name, verification_token, verification_token_expires) VALUES (?, ?, 0, ?, ?, ?, ?)',
+                [$name, $userRole, $approvalStatus, $userRole === 'academy' ? $academyName : null, $verificationToken, date('Y-m-d H:i:s', time() + 86400)]
+            );
+        } catch (Throwable $e) {
+            // Fallback for DBs that still lack new columns after ensure failed (no ALTER privilege)
+            error_log('[register] full insert failed: ' . $e->getMessage());
+            try {
+                $result = Database::queryRun(
+                    'INSERT INTO registrations (name, role, is_verified, is_approved, academy_name, verification_token) VALUES (?, ?, 0, ?, ?, ?)',
+                    [$name, $userRole, $approvalStatus, $userRole === 'academy' ? $academyName : null, $verificationToken]
+                );
+            } catch (Throwable $e1b) {
+                try {
+                    $result = Database::queryRun(
+                        'INSERT INTO registrations (name, role, is_verified, is_approved, verification_token) VALUES (?, ?, 0, ?, ?)',
+                        [$name, $userRole, $approvalStatus, $verificationToken]
+                    );
+                } catch (Throwable $e2) {
+                    error_log('[register] verification_token insert failed: ' . $e2->getMessage());
+                    try {
+                        $result = Database::queryRun(
+                            'INSERT INTO registrations (name, role, is_verified, is_approved) VALUES (?, ?, 0, ?)',
+                            [$name, $userRole, $approvalStatus]
+                        );
+                        $verificationToken = null;
+                    } catch (Throwable $e3) {
+                        // Role enum may reject "academy"
+                        if ($userRole === 'academy') {
+                            $result = Database::queryRun(
+                                'INSERT INTO registrations (name, role, is_verified, is_approved) VALUES (?, ?, 0, ?)',
+                                [$name, 'customer', $approvalStatus]
+                            );
+                            $userRole = 'customer';
+                            $verificationToken = null;
+                        } else {
+                            throw $e3;
+                        }
+                    }
+                }
+            }
+        }
         $userId = $result['lastInsertRowid'];
+        if ($userId < 1) {
+            Response::error('Registration failed — could not create account. Please try again or contact support.', 500);
+        }
 
         Database::queryRun(
             'INSERT INTO logins (registration_id, email, password) VALUES (?, ?, ?)',
@@ -51,50 +96,63 @@ class AuthController
                 'INSERT INTO reseller_profiles (user_id, referral_code, academy, commission_rate, status) VALUES (?, ?, ?, ?, ?)',
                 [$userId, $referralCode, $academyName, 56.00, 'approved']
             );
-            Mailer::send([
-                'to' => Site::email(),
-                'replyTo' => $email,
-                'subject' => "New reseller registration: $name",
-                'html' => "<p><strong>Name:</strong> " . htmlspecialchars($name) . "</p>
+            try {
+                Mailer::send([
+                    'to' => Site::email(),
+                    'replyTo' => $email,
+                    'subject' => "New reseller registration: $name",
+                    'html' => "<p><strong>Name:</strong> " . htmlspecialchars($name) . "</p>
                     <p><strong>Email:</strong> " . htmlspecialchars($email) . "</p>
                     <p><strong>Academy:</strong> " . htmlspecialchars($academyName) . "</p>
                     <p><strong>Referral code:</strong> $referralCode</p>",
-            ]);
+                ]);
+            } catch (Throwable $e) {
+                error_log('[register] reseller notify mail: ' . $e->getMessage());
+            }
         }
 
         if ($userRole === 'academy') {
-            Mailer::send([
-                'to' => Site::email(),
-                'replyTo' => $email,
-                'subject' => "New academy affiliate registration: $name",
-                'html' => "<p><strong>Name:</strong> " . htmlspecialchars($name) . "</p>
+            try {
+                Mailer::send([
+                    'to' => Site::email(),
+                    'replyTo' => $email,
+                    'subject' => "New academy affiliate registration: $name",
+                    'html' => "<p><strong>Name:</strong> " . htmlspecialchars($name) . "</p>
                     <p><strong>Email:</strong> " . htmlspecialchars($email) . "</p>
                     <p><strong>Academy:</strong> " . htmlspecialchars($academyName) . "</p>",
-            ]);
+                ]);
+            } catch (Throwable $e) {
+                error_log('[register] academy notify mail: ' . $e->getMessage());
+            }
         }
 
-        $verifyUrl = Client::getClientUrl() . '/verify-email?token=' . urlencode($verificationToken);
-        Mailer::send([
-            'to' => $email,
-            'subject' => 'Confirm your email — Village NetAcad',
-            'html' => '<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#111;line-height:1.5">'
-                . '<h2 style="color:#16a34a;margin-bottom:8px">Confirm your email address</h2>'
-                . '<p>Hi ' . htmlspecialchars($name) . ',</p>'
-                . '<p>Thank you for registering with <strong>Village NetAcad</strong>. Please confirm your email address to activate your account.</p>'
-                . '<p style="margin:28px 0">'
-                . '<a href="' . htmlspecialchars($verifyUrl) . '" style="background:#16a34a;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold">'
-                . 'Confirm my email</a></p>'
-                . '<p style="font-size:14px;color:#333"><strong>This confirmation link is available for 24 hours.</strong> After that, it will expire and you will need to register again or contact support.</p>'
-                . '<p style="font-size:13px;color:#555">If the button does not work, copy and paste this link into your browser:<br>'
-                . htmlspecialchars($verifyUrl) . '</p>'
-                . '<p style="margin-top:24px"><strong>The Village NetAcad Team</strong></p>'
-                . '<p style="font-size:13px;color:#555">If you did not create this account, you can ignore this email.</p>'
-                . '</div>',
-        ]);
+        if ($verificationToken) {
+            $emailSent = self::sendVerificationEmail($email, $name, $verificationToken);
+
+            $message = $emailSent
+                ? 'Account created. Please check your email and click the confirmation link before signing in.'
+                : 'Account created, but the confirmation email could not be sent. You can request another link from the confirmation page. Also ask the admin to set SMTP_PASS in backend-php/.env.';
+
+            Response::json([
+                'pending_verification' => true,
+                'email_sent' => $emailSent,
+                'message' => $message,
+                'user' => [
+                    'id' => (int) $userId,
+                    'name' => $name,
+                    'email' => $email,
+                    'role' => $userRole,
+                    'academy_name' => $userRole === 'academy' ? $academyName : null,
+                    'is_approved' => $approvalStatus,
+                    'is_verified' => false,
+                ],
+            ], 201);
+        }
 
         Response::json([
-            'pending_verification' => true,
-            'message' => 'Account created. Please check your email and click the confirmation link before signing in.',
+            'pending_verification' => false,
+            'email_sent' => false,
+            'message' => 'Account created. You can sign in now.',
             'user' => [
                 'id' => (int) $userId,
                 'name' => $name,
@@ -102,7 +160,7 @@ class AuthController
                 'role' => $userRole,
                 'academy_name' => $userRole === 'academy' ? $academyName : null,
                 'is_approved' => $approvalStatus,
-                'is_verified' => false,
+                'is_verified' => true,
             ],
         ], 201);
     }
@@ -134,7 +192,11 @@ class AuthController
         }
 
         if (($user['role'] ?? '') !== 'admin' && ($user['role'] ?? '') !== 'super_admin' && empty($user['is_verified'])) {
-            Response::error('Please confirm your email before signing in. Check your inbox for the registration confirmation link.', 403);
+            Response::json([
+                'message' => 'Please confirm your email before signing in. Check your inbox, or request a new confirmation link.',
+                'needs_verification' => true,
+                'email' => $email,
+            ], 403);
         }
 
         try {
@@ -160,27 +222,59 @@ class AuthController
 
     public static function verifyEmail(): void
     {
-        $token = Request::query('token');
-        $user = Database::queryGet(
-            'SELECT r.id, r.name, r.created_at, l.email
-             FROM registrations r
-             INNER JOIN logins l ON l.registration_id = r.id
-             WHERE r.verification_token = ?',
-            [$token]
-        );
+        SchemaEnsure::registrations();
+        $token = trim((string) Request::query('token'));
+        if ($token === '') {
+            Response::error('Missing confirmation token', 400);
+        }
+
+        $user = null;
+        try {
+            $user = Database::queryGet(
+                'SELECT r.id, r.name, r.created_at, r.verification_token_expires, l.email
+                 FROM registrations r
+                 INNER JOIN logins l ON l.registration_id = r.id
+                 WHERE r.verification_token = ?',
+                [$token]
+            );
+        } catch (Throwable $e) {
+            $user = Database::queryGet(
+                'SELECT r.id, r.name, r.created_at, l.email
+                 FROM registrations r
+                 INNER JOIN logins l ON l.registration_id = r.id
+                 WHERE r.verification_token = ?',
+                [$token]
+            );
+        }
         if (!$user) {
-            Response::error('Invalid or expired verification link', 400);
+            Response::error('Invalid or expired verification link. You can request a new confirmation email.', 400);
         }
 
-        $createdAt = strtotime((string) $user['created_at']);
-        if ($createdAt === false || (time() - $createdAt) > 86400) {
-            Response::error('This confirmation link has expired. Links are valid for 24 hours.', 400);
+        $expiresAt = !empty($user['verification_token_expires'])
+            ? strtotime((string) $user['verification_token_expires'])
+            : false;
+        if ($expiresAt !== false) {
+            if ($expiresAt < time()) {
+                Response::error('This confirmation link has expired. Request a new link below.', 400);
+            }
+        } else {
+            $createdAt = strtotime((string) $user['created_at']);
+            if ($createdAt === false || (time() - $createdAt) > 86400) {
+                Response::error('This confirmation link has expired. Request a new link below.', 400);
+            }
         }
 
-        Database::queryRun(
-            'UPDATE registrations SET is_verified = 1, verification_token = NULL WHERE id = ?',
-            [$user['id']]
-        );
+        try {
+            Database::queryRun(
+                'UPDATE registrations SET is_verified = 1, verification_token = NULL, verification_token_expires = NULL WHERE id = ?',
+                [$user['id']]
+            );
+        } catch (Throwable $e) {
+            Database::queryRun(
+                'UPDATE registrations SET is_verified = 1, verification_token = NULL WHERE id = ?',
+                [$user['id']]
+            );
+        }
 
         $loginUrl = Client::getClientUrl() . '/login';
         Mailer::send([
@@ -202,43 +296,161 @@ class AuthController
         Response::json(['message' => 'Email verified successfully']);
     }
 
+    public static function resendVerification(): void
+    {
+        $body = Request::jsonBody();
+        $email = strtolower(trim((string) ($body['email'] ?? '')));
+        if ($email === '') {
+            Response::error('Email is required', 400);
+        }
+
+        SchemaEnsure::registrations();
+
+        $user = User::findByEmailForAuth($email);
+        $emailSent = false;
+
+        if ($user && empty($user['is_verified'])) {
+            $token = Request::uuid();
+            $expires = date('Y-m-d H:i:s', time() + 86400);
+            try {
+                Database::queryRun(
+                    'UPDATE registrations SET verification_token = ?, verification_token_expires = ? WHERE id = ?',
+                    [$token, $expires, $user['id']]
+                );
+            } catch (Throwable $e) {
+                Database::queryRun(
+                    'UPDATE registrations SET verification_token = ? WHERE id = ?',
+                    [$token, $user['id']]
+                );
+            }
+            $emailSent = self::sendVerificationEmail($email, (string) $user['name'], $token);
+            if (!$emailSent) {
+                error_log('[resendVerification] mail failed: ' . (Mailer::$lastError ?? 'unknown'));
+            }
+        }
+
+        Response::json([
+            'message' => 'If that account needs confirmation, a new link was sent. Check your inbox and spam folder.',
+            'email_sent' => $user && empty($user['is_verified']) ? $emailSent : null,
+        ]);
+    }
+
+    private static function sendVerificationEmail(string $email, string $name, string $verificationToken): bool
+    {
+        $verifyUrl = Client::getClientUrl() . '/verify-email?token=' . urlencode($verificationToken);
+        try {
+            return Mailer::send([
+                'to' => $email,
+                'subject' => 'Confirm your email — Village NetAcad',
+                'html' => '<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#111;line-height:1.5">'
+                    . '<h2 style="color:#16a34a;margin-bottom:8px">Confirm your email address</h2>'
+                    . '<p>Hi ' . htmlspecialchars($name) . ',</p>'
+                    . '<p>Thank you for registering with <strong>Village NetAcad</strong>. Please confirm your email address to activate your account.</p>'
+                    . '<p style="margin:28px 0">'
+                    . '<a href="' . htmlspecialchars($verifyUrl) . '" style="background:#16a34a;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold">'
+                    . 'Confirm my email</a></p>'
+                    . '<p style="font-size:14px;color:#333"><strong>This confirmation link is available for 24 hours.</strong> If it expires, you can request another link from the website.</p>'
+                    . '<p style="font-size:13px;color:#555">If the button does not work, copy and paste this link into your browser:<br>'
+                    . htmlspecialchars($verifyUrl) . '</p>'
+                    . '<p style="margin-top:24px"><strong>The Village NetAcad Team</strong></p>'
+                    . '<p style="font-size:13px;color:#555">If you did not create this account, you can ignore this email.</p>'
+                    . '</div>',
+            ]);
+        } catch (Throwable $e) {
+            error_log('[sendVerificationEmail] ' . $e->getMessage());
+            return false;
+        }
+    }
+
     public static function forgotPassword(): void
     {
         $body = Request::jsonBody();
-        $email = $body['email'] ?? '';
-        $user = User::findByEmailForAuth($email);
+        $email = strtolower(trim((string) ($body['email'] ?? '')));
 
-        if ($user) {
-            $resetToken = Request::uuid();
-            $expires = gmdate('c', time() + 3600);
-            Database::queryRun(
-                'UPDATE logins SET reset_token = ?, reset_token_expires = ? WHERE registration_id = ?',
-                [$resetToken, $expires, $user['id']]
-            );
-            $resetUrl = Client::getClientUrl() . '/reset-password?token=' . urlencode($resetToken);
-            Mailer::send([
-                'to' => $email,
-                'subject' => 'Password Reset - Village NetAcad',
-                'html' => '<h2>Hi ' . htmlspecialchars($user['name']) . '</h2>
-                    <p>Click <a href="' . $resetUrl . '">here</a> to reset your password. Expires in 1 hour.</p>',
-            ]);
+        if ($email === '') {
+            Response::error('Email is required', 400);
         }
 
-        Response::json(['message' => 'If that email exists, a reset link was sent']);
+        SchemaEnsure::logins();
+
+        $user = User::findByEmailForAuth($email);
+        $emailSent = false;
+
+        if ($user) {
+            // Hex-only token (no hyphens) — safer in email clients than UUID query strings
+            $resetToken = bin2hex(random_bytes(32));
+            try {
+                Database::queryRun(
+                    'UPDATE logins SET reset_token = ?, reset_token_expires = DATE_ADD(NOW(), INTERVAL 1 HOUR) WHERE registration_id = ?',
+                    [$resetToken, $user['id']]
+                );
+            } catch (Throwable $e) {
+                error_log('[forgotPassword] token save failed: ' . $e->getMessage());
+                Response::error('Password reset is not available right now. Please contact support.', 500);
+            }
+
+            // Path-based link avoids query-string mangling by some mail apps
+            $resetUrl = Client::getClientUrl() . '/reset-password/' . $resetToken;
+            $emailSent = Mailer::send([
+                'to' => $email,
+                'subject' => 'Reset your Village NetAcad password',
+                'html' => '<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#111;line-height:1.5">'
+                    . '<h2 style="color:#16a34a;margin-bottom:8px">Reset your password</h2>'
+                    . '<p>Hi ' . htmlspecialchars((string) $user['name']) . ',</p>'
+                    . '<p>We received a request to reset the password for your <strong>Village NetAcad</strong> account.</p>'
+                    . '<p style="margin:28px 0">'
+                    . '<a href="' . htmlspecialchars($resetUrl) . '" style="background:#16a34a;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold">'
+                    . 'Reset my password</a></p>'
+                    . '<p style="font-size:14px;color:#333"><strong>This link expires in 1 hour.</strong> If you did not request a reset, you can ignore this email.</p>'
+                    . '<p style="font-size:13px;color:#555">If the button does not work, copy and paste this link into your browser:<br>'
+                    . htmlspecialchars($resetUrl) . '</p>'
+                    . '<p style="margin-top:24px"><strong>The Village NetAcad Team</strong></p>'
+                    . '</div>',
+            ]);
+
+            if (!$emailSent) {
+                error_log('[forgotPassword] email not sent for ' . $email . ': ' . (Mailer::$lastError ?? 'unknown'));
+            }
+        }
+
+        Response::json([
+            'message' => 'If that email exists, a reset link was sent. Check your inbox and spam folder.',
+            'email_sent' => $user ? $emailSent : null,
+        ]);
     }
 
     public static function resetPassword(): void
     {
         $body = Request::jsonBody();
-        $token = $body['token'] ?? '';
-        $password = $body['password'] ?? '';
+        $token = self::normalizeResetToken((string) ($body['token'] ?? ''));
+        $password = (string) ($body['password'] ?? '');
+
+        if ($token === '' || $password === '') {
+            Response::error('Token and new password are required', 400);
+        }
+        if (strlen($password) < 6) {
+            Response::error('Password must be at least 6 characters', 400);
+        }
+
+        SchemaEnsure::logins();
 
         $login = Database::queryGet(
-            "SELECT registration_id FROM logins WHERE reset_token = ? AND reset_token_expires > NOW()",
+            'SELECT registration_id, reset_token_expires FROM logins WHERE reset_token = ?',
             [$token]
         );
         if (!$login) {
-            Response::error('Invalid or expired reset token', 400);
+            Response::error('Invalid or expired reset link. Please request a new one.', 400);
+        }
+
+        $expiresRaw = $login['reset_token_expires'] ?? null;
+        if ($expiresRaw === null || $expiresRaw === '') {
+            Response::error('Invalid or expired reset link. Please request a new one.', 400);
+        }
+
+        // Accept both MySQL DATETIME and legacy ISO strings
+        $expiresTs = strtotime((string) $expiresRaw);
+        if ($expiresTs === false || $expiresTs < time()) {
+            Response::error('This reset link has expired. Please request a new one.', 400);
         }
 
         $hash = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
@@ -246,7 +458,15 @@ class AuthController
             'UPDATE logins SET password = ?, reset_token = NULL, reset_token_expires = NULL WHERE registration_id = ?',
             [$hash, $login['registration_id']]
         );
-        Response::json(['message' => 'Password reset successfully']);
+        Response::json(['message' => 'Password reset successfully. You can sign in with your new password.']);
+    }
+
+    private static function normalizeResetToken(string $token): string
+    {
+        $token = trim(rawurldecode($token));
+        // Strip accidental wrapping quotes / spaces from email clients
+        $token = trim($token, " \t\n\r\0\x0B\"'<>");
+        return $token;
     }
 
     public static function me(): void

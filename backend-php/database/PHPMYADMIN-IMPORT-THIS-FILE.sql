@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS registrations (
   is_verified TINYINT(1) DEFAULT 0,
   is_approved ENUM('pending','approved','declined') DEFAULT 'pending',
   verification_token VARCHAR(255) DEFAULT NULL,
+  verification_token_expires DATETIME DEFAULT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -74,6 +75,8 @@ CREATE TABLE IF NOT EXISTS orders (
   id INT AUTO_INCREMENT PRIMARY KEY,
   user_id INT NOT NULL,
   total DECIMAL(10,2) NOT NULL,
+  delivery_method VARCHAR(20) NOT NULL DEFAULT 'delivery',
+  shipping_fee DECIMAL(10,2) NOT NULL DEFAULT 0.00,
   status ENUM('pending','processing','shipped','delivered','cancelled') DEFAULT 'pending',
   shipping_address TEXT NOT NULL,
   payment_intent_id VARCHAR(255) DEFAULT NULL,
@@ -164,6 +167,9 @@ CREATE TABLE IF NOT EXISTS reseller_profiles (
   total_earned DECIMAL(10,2) DEFAULT 0.00,
   bio TEXT DEFAULT NULL,
   academy VARCHAR(255) DEFAULT NULL,
+  bank_details TEXT DEFAULT NULL,
+  id_document_url VARCHAR(500) DEFAULT NULL,
+  proof_of_account_url VARCHAR(500) DEFAULT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES registrations(id) ON DELETE CASCADE
@@ -258,6 +264,11 @@ CREATE TABLE IF NOT EXISTS hero_slides (
   subtitle TEXT,
   body TEXT,
   text_position VARCHAR(40) NOT NULL DEFAULT 'center',
+  label_color VARCHAR(20) NOT NULL DEFAULT '#FDE68A',
+  title_color VARCHAR(20) NOT NULL DEFAULT '#FFFFFF',
+  title_highlight_color VARCHAR(20) NOT NULL DEFAULT '',
+  subtitle_color VARCHAR(20) NOT NULL DEFAULT '#F5F5F5',
+  body_color VARCHAR(20) NOT NULL DEFAULT '#E5E5E5',
   sort_order INT DEFAULT 0,
   is_active TINYINT(1) DEFAULT 1,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,

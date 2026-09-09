@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Building2, Check, DollarSign, Wallet, X as XIcon } from "lucide-react";
-import api from "../../lib/api";
+import { Building2, Check, DollarSign, Wallet, X as XIcon, Download, FileText } from "lucide-react";
+import api, { API_BASE } from "../../lib/api";
 import toast from "react-hot-toast";
 
 const ACADEMY_RATE = 26;
@@ -69,6 +69,26 @@ export default function AdminFinance() {
     }
   };
 
+  const downloadResellerReport = (format) => {
+    const token = localStorage.getItem("token");
+    fetch(`${API_BASE}/admin/reports/resellers/${format}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error("fail");
+        return r.blob();
+      })
+      .then((blob) => {
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `resellers-banking-report.${format === "pdf" ? "txt" : "csv"}`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+        toast.success(`Reseller banking report downloaded (${format.toUpperCase()})`);
+      })
+      .catch(() => toast.error("Download failed"));
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -79,13 +99,23 @@ export default function AdminFinance() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-black bg-gradient-to-r from-burnt-400 to-primary-400 bg-clip-text text-transparent">
-          Finance
-        </h1>
-        <p className="text-sm text-gray-400 mt-1">
-          Track reseller earnings, academy payouts ({ACADEMY_RATE}% of linked sales), and withdrawal requests (minimum R100).
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-black bg-gradient-to-r from-burnt-400 to-primary-400 bg-clip-text text-transparent">
+            Finance
+          </h1>
+          <p className="text-sm text-gray-400 mt-1">
+            Track reseller earnings, academy payouts ({ACADEMY_RATE}% of linked sales), and withdrawal requests (minimum R100).
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => downloadResellerReport("csv")} className="btn-secondary text-sm inline-flex items-center gap-2 !py-2 !px-4">
+            <Download size={16} /> Resellers CSV
+          </button>
+          <button type="button" onClick={() => downloadResellerReport("pdf")} className="btn-primary text-sm inline-flex items-center gap-2 !py-2 !px-4">
+            <FileText size={16} /> Resellers PDF
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

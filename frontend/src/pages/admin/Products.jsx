@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Plus, Pencil, Trash2, X } from "lucide-react";
+import { Plus, Pencil, Trash2, X, Check } from "lucide-react";
 import api from "../../lib/api";
 import toast from "react-hot-toast";
 import { productTypeLabel, typesForDepartment } from "../../lib/productTypes";
@@ -11,7 +11,7 @@ const emptyForm = {
   compare_price: "",
   category_id: "",
   subcategory: "",
-  stock: "",
+  stock: "0",
   sizes: "",
   colors: "",
   is_active: "1",
@@ -38,6 +38,8 @@ export default function AdminProducts() {
   const [image, setImage] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [stockDrafts, setStockDrafts] = useState({});
+  const [stockSavingId, setStockSavingId] = useState(null);
 
   const departments = useMemo(
     () =>
@@ -73,8 +75,14 @@ export default function AdminProducts() {
         api.get("/products/admin/all"),
         api.get("/products/meta/categories"),
       ]);
-      setProducts(p.data.products || []);
+      const list = p.data.products || [];
+      setProducts(list);
       setCategories(c.data || []);
+      const drafts = {};
+      list.forEach((item) => {
+        drafts[item.id] = String(item.stock ?? 0);
+      });
+      setStockDrafts(drafts);
     } catch (err) {
       toast.error(err.response?.data?.message || "Failed to load products");
     } finally {
@@ -85,6 +93,26 @@ export default function AdminProducts() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  const saveStock = async (product) => {
+    const raw = stockDrafts[product.id];
+    const next = Math.max(0, parseInt(String(raw ?? "0"), 10) || 0);
+    if (next === Number(product.stock)) {
+      toast.success("Stock unchanged");
+      return;
+    }
+    setStockSavingId(product.id);
+    try {
+      await api.put(`/products/${product.id}`, { stock: next });
+      setProducts((prev) => prev.map((p) => (p.id === product.id ? { ...p, stock: next } : p)));
+      setStockDrafts((prev) => ({ ...prev, [product.id]: String(next) }));
+      toast.success(`Stock updated to ${next}`);
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to update stock");
+    } finally {
+      setStockSavingId(null);
+    }
+  };
 
   const openNew = () => {
     setEditing(null);
@@ -152,14 +180,10 @@ export default function AdminProducts() {
     setSaving(true);
     try {
       if (editing) {
-        await api.post(`/products/${editing.id}`, fd, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
+        await api.post(`/products/${editing.id}`, fd);
         toast.success("Product updated");
       } else {
-        await api.post("/products", fd, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
+        await api.post("/products", fd);
         toast.success("Product created");
       }
       setShowModal(false);
@@ -238,7 +262,36 @@ export default function AdminProducts() {
                   <td className="py-3">{p.category_name || "-"}</td>
                   <td className="py-3">{productTypeLabel(p.subcategory) || "-"}</td>
                   <td className="py-3">R{Number(p.price).toFixed(2)}</td>
-                  <td className="py-3">{p.stock}</td>
+                  <td className="py-3">
+                    <div className="flex items-center gap-1.5 min-w-[9rem]">
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={stockDrafts[p.id] ?? String(p.stock ?? 0)}
+                        onChange={(e) =>
+                          setStockDrafts((prev) => ({ ...prev, [p.id]: e.target.value }))
+                        }
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            saveStock(p);
+                          }
+                        }}
+                        className="input-field !py-1.5 !px-2 w-20 text-sm"
+                        aria-label={`Stock for ${p.name}`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => saveStock(p)}
+                        disabled={stockSavingId === p.id}
+                        className="p-1.5 rounded-lg border border-white/15 hover:bg-white/10 text-burnt-300 disabled:opacity-50"
+                        title="Save stock"
+                      >
+                        <Check size={14} />
+                      </button>
+                    </div>
+                  </td>
                   <td className="py-3">
                     <span
                       className={`text-xs px-2 py-1 rounded-full ${
@@ -278,15 +331,15 @@ export default function AdminProducts() {
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 glass-clear z-50 flex items-center justify-center p-4">
-          <div className="card w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
+        <div className="fixed inset-0 glass-clear z-50 flex items-start sm:items-center justify-center p-4 overflow-y-auto">
+          <div className="card w-full max-w-lg my-4 sm:my-8 max-h-[min(92vh,900px)] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between mb-4 shrink-0">
               <h2 className="text-lg font-bold">{editing ? "Edit" : "Add"} Product</h2>
               <button type="button" onClick={() => setShowModal(false)} className="p-1">
                 <X size={20} />
               </button>
             </div>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto overscroll-contain pr-1 flex-1 min-h-0">
               <input
                 required
                 placeholder="Product Name"
@@ -361,15 +414,20 @@ export default function AdminProducts() {
                 </div>
               )}
 
-              <input
-                type="number"
-                min="0"
-                placeholder="Stock"
-                value={form.stock}
-                onChange={(e) => setForm({ ...form, stock: e.target.value })}
-                className="input-field"
-              />
-
+              <div>
+                <label className="block text-sm font-medium mb-2">Stock quantity</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  required
+                  placeholder="0"
+                  value={form.stock}
+                  onChange={(e) => setForm({ ...form, stock: e.target.value })}
+                  className="input-field"
+                />
+                <p className="text-xs text-gray-500 mt-1">How many units are available in the shop.</p>
+              </div>
               {showSizes && (
                 <div>
                   <label className="block text-sm font-medium mb-2">Sizes</label>

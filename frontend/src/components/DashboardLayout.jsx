@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { LayoutDashboard, Package, ShoppingBag, Users, UserCheck, Menu, X, LogOut, Home, TrendingUp, Landmark, Wallet, PanelsTopLeft, MapPinned } from "lucide-react";
+import { LayoutDashboard, Package, ShoppingBag, Users, UserCheck, Menu, X, LogOut, Home, TrendingUp, Landmark, Wallet, PanelsTopLeft, MapPinned, Building2 } from "lucide-react";
 
 const adminLinks = [
   { to: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -17,6 +17,7 @@ const adminLinks = [
 const resellerLinks = [
   { to: "/reseller/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/reseller/sales", label: "Sales", icon: TrendingUp },
+  { to: "/reseller/banking", label: "Banking", icon: Building2 },
   { to: "/reseller/withdraw", label: "Withdraw", icon: Wallet },
 ];
 

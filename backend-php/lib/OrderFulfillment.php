@@ -37,7 +37,9 @@ class OrderFulfillment
             if ($reseller) {
                 $existing = Database::queryGet('SELECT id FROM commissions WHERE order_id = ?', [$orderId]);
                 if (!$existing) {
-                    $commission = (float) $order['total'] * ((float) $reseller['commission_rate'] / 100);
+                    $shippingFee = (float) ($order['shipping_fee'] ?? 0);
+                    $commissionBase = max(0.0, (float) $order['total'] - $shippingFee);
+                    $commission = $commissionBase * ((float) $reseller['commission_rate'] / 100);
                     Database::queryRun(
                         'INSERT INTO commissions (reseller_id, order_id, amount) VALUES (?, ?, ?)',
                         [$reseller['id'], $orderId, $commission]
@@ -66,12 +68,19 @@ class OrderFulfillment
                 fn ($i) => $i['name'] . ' × ' . $i['quantity'] . ' (R' . number_format($i['price'] * $i['quantity'], 2) . ')',
                 $items
             ));
+            $method = strtolower((string) ($order['delivery_method'] ?? 'delivery'));
+            $addr = json_decode((string) ($order['shipping_address'] ?? ''), true);
+            $centreName = is_array($addr) ? trim((string) ($addr['collection_centre'] ?? '')) : '';
+            $methodLabel = $method === 'collection'
+                ? ('Collection at ' . ($centreName !== '' ? $centreName : 'centre') . ' (free)')
+                : 'Delivery (R' . number_format((float) ($order['shipping_fee'] ?? 0), 2) . ')';
             Mailer::send([
                 'to' => Site::email(),
                 'replyTo' => $user['email'],
                 'subject' => 'Paid order #' . $orderId . ' — R' . number_format((float) $order['total'], 2),
                 'html' => '<p><strong>Customer:</strong> ' . htmlspecialchars($user['name']) . ' (' . htmlspecialchars($user['email']) . ')</p>
                     <p><strong>Order ID:</strong> ' . $orderId . '</p>
+                    <p><strong>Fulfillment:</strong> ' . htmlspecialchars($methodLabel) . '</p>
                     <p><strong>Total paid:</strong> R' . number_format((float) $order['total'], 2) . '</p>
                     <p><strong>Items:</strong><br>' . $itemsList . '</p>',
             ]);

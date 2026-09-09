@@ -59,6 +59,29 @@ class Request
         if (!in_array($ext, $allowed, true)) {
             Response::error('Only image files are allowed', 400);
         }
+        return self::storeUpload($file, $ext);
+    }
+
+    /** Images or PDF for reseller ID / proof-of-account documents. */
+    public static function handleDocumentUpload(?array $file): ?string
+    {
+        if (!$file || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            return null;
+        }
+        $allowed = ['jpeg', 'jpg', 'png', 'gif', 'webp', 'pdf'];
+        $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+        if (!in_array($ext, $allowed, true)) {
+            Response::error('Documents must be an image (JPG/PNG/WebP) or PDF', 400);
+        }
+        $maxBytes = 8 * 1024 * 1024;
+        if (($file['size'] ?? 0) > $maxBytes) {
+            Response::error('Document must be 8MB or smaller', 400);
+        }
+        return self::storeUpload($file, $ext);
+    }
+
+    private static function storeUpload(array $file, string $ext): string
+    {
         $uploadsDir = Paths::getUploadsDir();
         Paths::ensureDir($uploadsDir);
         $filename = time() . '-' . random_int(100000000, 999999999) . '.' . $ext;

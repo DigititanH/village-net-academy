@@ -153,6 +153,14 @@ class Hosting
                     'ok' => $configErrors === [],
                     'errors' => $configErrors,
                 ],
+                'smtp' => [
+                    'ok' => Mailer::isConfigured(),
+                    'host' => Env::get('SMTP_HOST') ?: Env::get('MAIL_HOST') ?: null,
+                    'user' => Env::get('SMTP_USER') ?: Env::get('MAIL_USERNAME') ?: null,
+                    'hint' => Mailer::isConfigured()
+                        ? null
+                        : 'Set SMTP_PASS and MAIL_PASSWORD in backend-php/.env to the real password for noreply@villagenetacad.co.za (not YOUR_EMAIL_PASSWORD)',
+                ],
             ],
         ];
     }

@@ -2,17 +2,60 @@
 
 class OrdersController
 {
+    private const DELIVERY_FEE = 150.0;
+
     public static function create(): void
     {
         Auth::authenticate();
+        SchemaEnsure::orders();
+
         $body = Request::jsonBody();
         $items = $body['items'] ?? [];
         $shippingAddress = $body['shipping_address'] ?? null;
         $referralCode = trim((string) ($body['referral_code'] ?? ''));
+        $deliveryMethod = strtolower(trim((string) ($body['delivery_method'] ?? '')));
 
-        if (!$items || !$shippingAddress) {
-            Response::error('Items and shipping address are required', 400);
+        if (!in_array($deliveryMethod, ['delivery', 'collection'], true)) {
+            Response::error('Please select Delivery or Collection at the centre', 400);
         }
+
+        if (!$items || !is_array($shippingAddress)) {
+            Response::error('Items and contact details are required', 400);
+        }
+
+        $phone = trim((string) ($shippingAddress['phone'] ?? ''));
+        if ($phone === '') {
+            Response::error('Phone number is required', 400);
+        }
+
+        if ($deliveryMethod === 'delivery') {
+            foreach (['street', 'city', 'province', 'zip'] as $field) {
+                if (trim((string) ($shippingAddress[$field] ?? '')) === '') {
+                    Response::error('Full delivery address is required for delivery orders', 400);
+                }
+            }
+            unset($shippingAddress['collection_centre_id'], $shippingAddress['collection_centre'], $shippingAddress['fulfillment']);
+        } else {
+            $centreId = (int) ($body['collection_centre_id'] ?? $shippingAddress['collection_centre_id'] ?? 0);
+            $centre = AscController::findById($centreId);
+            if (!$centre) {
+                Response::error('Please select a collection centre', 400);
+            }
+            $shippingAddress = array_merge([
+                'street' => '',
+                'city' => '',
+                'province' => '',
+                'zip' => '',
+            ], $shippingAddress);
+            $shippingAddress['collection_centre_id'] = (int) $centre['id'];
+            $shippingAddress['collection_centre'] = $centre['name'];
+            $shippingAddress['collection_province'] = $centre['province'] ?? '';
+            $shippingAddress['collection_city'] = $centre['city'] ?? '';
+            $shippingAddress['collection_address'] = $centre['address'] ?? '';
+            $shippingAddress['fulfillment'] = 'Collection at ' . $centre['name'];
+        }
+
+        $shippingFee = $deliveryMethod === 'delivery' ? self::DELIVERY_FEE : 0.0;
 
         $reseller = null;
         if ($referralCode !== '') {
@@ -25,7 +68,7 @@ class OrdersController
             }
         }
 
-        $total = 0.0;
+        $subtotal = 0.0;
         $orderItems = [];
 
         foreach ($items as $item) {
@@ -40,22 +83,32 @@ class OrdersController
                 Response::error($product['name'] . ' is out of stock', 400);
             }
             $lineTotal = (float) $product['price'] * (int) $item['quantity'];
-            $total += $lineTotal;
+            $subtotal += $lineTotal;
             $orderItems[] = array_merge($item, [
                 'price' => $product['price'],
                 'name' => $product['name'],
             ]);
         }
 
+        $total = $subtotal + $shippingFee;
+
         $payfastEnabled = Payfast::isConfigured();
         if ($payfastEnabled && $total < 5) {
             Response::error('PayFast orders must total at least R5.00', 400);
         }
 
-        $order = Database::queryRun(
-            "INSERT INTO orders (user_id, total, shipping_address, payment_status, referral_code) VALUES (?, ?, ?, 'pending', ?)",
-            [Auth::$user['id'], $total, json_encode($shippingAddress), $referralCode ?: null]
-        );
+        try {
+            $order = Database::queryRun(
+                "INSERT INTO orders (user_id, total, delivery_method, shipping_fee, shipping_address, payment_status, referral_code) VALUES (?, ?, ?, ?, ?, 'pending', ?)",
+                [Auth::$user['id'], $total, $deliveryMethod, $shippingFee, json_encode($shippingAddress), $referralCode ?: null]
+            );
+        } catch (Throwable $e) {
+            SchemaEnsure::orders();
+            $order = Database::queryRun(
+                "INSERT INTO orders (user_id, total, delivery_method, shipping_fee, shipping_address, payment_status, referral_code) VALUES (?, ?, ?, ?, ?, 'pending', ?)",
+                [Auth::$user['id'], $total, $deliveryMethod, $shippingFee, json_encode($shippingAddress), $referralCode ?: null]
+            );
+        }
         $orderId = $order['lastInsertRowid'];
 
         foreach ($orderItems as $item) {
@@ -76,6 +129,9 @@ class OrdersController
             Response::json([
                 'order_id' => $orderId,
                 'total' => $total,
+                'subtotal' => $subtotal,
+                'shipping_fee' => $shippingFee,
+                'delivery_method' => $deliveryMethod,
                 'payfast' => true,
                 'message' => 'Order created. Redirecting to PayFast for payment.',
             ], 201);
@@ -85,6 +141,9 @@ class OrdersController
         Response::json([
             'order_id' => $orderId,
             'total' => $total,
+            'subtotal' => $subtotal,
+            'shipping_fee' => $shippingFee,
+            'delivery_method' => $deliveryMethod,
             'payfast' => false,
             'message' => 'Order placed successfully.',
         ], 201);

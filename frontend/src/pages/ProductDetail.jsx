@@ -125,7 +125,7 @@ export default function ProductDetail() {
             {colors.length > 0 && (
               <div className="mb-6">
                 <label className="block text-sm font-semibold mb-2 text-gray-300">Color</label>
-                <div className="flex gap-2">{colors.map((c) => <button key={c} onClick={() => setColor(c)} className={`px-4 py-2 rounded-xl border text-sm font-bold transition-all duration-300 ${color === c ? "bg-gradient-to-r from-burnt-400 to-primary-400 text-white border-transparent shadow-[0_0_15px_rgba(14,165,233,0.28)]" : "border-white/20 hover:border-burnt-600/35"}`}>{c}</button>)}</div>
+                <div className="flex gap-2 flex-wrap">{colors.map((c) => <button key={c} onClick={() => setColor(c)} className={`px-4 py-2 rounded-xl border text-sm font-bold transition-all duration-300 ${color === c ? "bg-gradient-to-r from-burnt-400 to-primary-400 text-white border-transparent shadow-[0_0_15px_rgba(14,165,233,0.28)]" : "border-white/20 hover:border-burnt-600/35"}`}>{c}</button>)}</div>
               </div>
             )}
 

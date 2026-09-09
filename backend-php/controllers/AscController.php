@@ -117,6 +117,19 @@ class AscController
         ];
     }
 
+    public static function findById(int $id): ?array
+    {
+        if ($id <= 0) {
+            return null;
+        }
+        foreach (self::loadCentres() as $centre) {
+            if ((int) ($centre['id'] ?? 0) === $id) {
+                return $centre;
+            }
+        }
+        return null;
+    }
+
     public static function index(): void
     {
         $province = trim((string) Request::query('province', ''));

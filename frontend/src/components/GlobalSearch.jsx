@@ -63,21 +63,21 @@ export default function GlobalSearch() {
   const noResults = query.trim().length >= 2 && !loading && !hasResults;
 
   if (!isOpen) return (
-    <button onClick={() => setIsOpen(true)} className="p-2 rounded-xl hover:bg-white/10 transition-colors text-gray-300 hover:text-burnt-600" title="Search (Ctrl+K)">
+    <button type="button" onClick={() => setIsOpen(true)} className="p-2 rounded-xl hover:bg-slate-100 transition-colors text-slate-700 hover:text-burnt-600" title="Search (Ctrl+K)" aria-label="Search">
       <Search size={18} />
     </button>
   );
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-start justify-center pt-[10vh]" onClick={close}>
+    <div className="fixed inset-0 z-[100] flex items-start justify-center pt-[8vh] sm:pt-[10vh] px-2" onClick={close}>
       <div className="absolute inset-0 glass-clear" />
 
       <div
-        className="relative w-full max-w-2xl mx-4 glass border-burnt-700/25 rounded-3xl shadow-[0_0_80px_rgba(14,165,233,0.22)] overflow-hidden"
+        className="relative w-full max-w-2xl mx-2 sm:mx-4 glass border-burnt-700/25 rounded-2xl sm:rounded-3xl shadow-[0_0_80px_rgba(14,165,233,0.22)] overflow-hidden max-h-[85vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Search Input */}
-        <div className="flex items-center gap-3 px-6 py-4 border-b border-white/10">
+        <div className="flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-3 sm:py-4 border-b border-white/10">
           <Search size={20} className="text-burnt-600 flex-shrink-0" />
           <input
             ref={inputRef}
@@ -85,7 +85,7 @@ export default function GlobalSearch() {
             value={query}
             onChange={handleChange}
             placeholder="Search products, pages, categories..."
-            className="flex-1 bg-transparent text-white text-lg placeholder-gray-500 outline-none"
+            className="flex-1 min-w-0 bg-transparent text-white text-base sm:text-lg placeholder-gray-500 outline-none"
           />
           <kbd className="hidden sm:inline-flex items-center gap-1 text-xs text-gray-500 border border-white/10 rounded-lg px-2 py-1">ESC</kbd>
           <button onClick={close} className="p-1 hover:bg-white/10 rounded-lg transition-colors">

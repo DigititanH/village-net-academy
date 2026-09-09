@@ -2,16 +2,25 @@
 
 class Mailer
 {
-    public static function send(array $opts): void
+    /** Last send result for callers that need to warn the user. */
+    public static ?string $lastError = null;
+    public static bool $lastSkipped = false;
+
+    public static function send(array $opts): bool
     {
+        self::$lastError = null;
+        self::$lastSkipped = false;
+
         $to = trim((string) ($opts['to'] ?? ''));
         $subject = (string) ($opts['subject'] ?? '');
         $html = (string) ($opts['html'] ?? '');
         $replyTo = $opts['replyTo'] ?? null;
 
         if ($to === '' || $subject === '') {
+            self::$lastError = 'Missing to/subject';
+            self::$lastSkipped = true;
             error_log('[Mailer] Missing to/subject — mail skipped');
-            return;
+            return false;
         }
 
         $host = self::cfg('SMTP_HOST', 'MAIL_HOST');
@@ -23,8 +32,10 @@ class Mailer
         $fromName = self::cfg('SMTP_FROM_NAME', 'MAIL_FROM_NAME') ?: 'Village NetAcad';
 
         if ($host === '' || $user === '' || $pass === '' || $pass === 'YOUR_EMAIL_PASSWORD') {
+            self::$lastError = 'SMTP password not set in backend-php/.env (SMTP_PASS / MAIL_PASSWORD)';
+            self::$lastSkipped = true;
             error_log("[Mailer] SMTP not configured — would send to $to: $subject");
-            return;
+            return false;
         }
 
         try {
@@ -41,9 +52,20 @@ class Mailer
                 'html' => $html,
                 'replyTo' => $replyTo,
             ]);
+            return true;
         } catch (Throwable $e) {
+            self::$lastError = $e->getMessage();
             error_log('[Mailer] SMTP send failed: ' . $e->getMessage());
+            return false;
         }
+    }
+
+    public static function isConfigured(): bool
+    {
+        $host = self::cfg('SMTP_HOST', 'MAIL_HOST');
+        $user = self::cfg('SMTP_USER', 'MAIL_USERNAME');
+        $pass = self::cfg('SMTP_PASS', 'MAIL_PASSWORD');
+        return $host !== '' && $user !== '' && $pass !== '' && $pass !== 'YOUR_EMAIL_PASSWORD';
     }
 
     private static function cfg(string $primary, string $alias): string

@@ -25,8 +25,11 @@ $ensure = [
     'ensure-store-categories.php',
     'ensure-product-subcategory.php',
     'ensure-hero-text-position.php',
+    'ensure-hero-text-colors.php',
     'ensure-hero-buttons.php',
     'ensure-academy-role.php',
+    'ensure-order-delivery.php',
+    'ensure-reseller-banking.php',
 ];
 
 // migrate.php is a full script — run via include after marking

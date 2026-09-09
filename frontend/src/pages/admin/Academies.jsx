@@ -200,13 +200,13 @@ export default function AdminAcademies() {
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
-          <div className="w-full max-w-md card relative">
-            <button type="button" onClick={() => setShowModal(false)} className="absolute right-3 top-3 p-1 text-gray-400 hover:text-white">
+        <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-4 bg-black/60 overflow-y-auto">
+          <div className="w-full max-w-md card relative my-4 sm:my-8 max-h-[min(92vh,900px)] flex flex-col overflow-hidden">
+            <button type="button" onClick={() => setShowModal(false)} className="absolute right-3 top-3 z-10 p-1 text-gray-400 hover:text-white">
               <X size={18} />
             </button>
-            <h3 className="text-lg font-semibold mb-4">{editing ? "Edit academy" : "Add academy"}</h3>
-            <form onSubmit={save} className="space-y-3">
+            <h3 className="text-lg font-semibold mb-4 pr-8 shrink-0">{editing ? "Edit academy" : "Add academy"}</h3>
+            <form onSubmit={save} className="space-y-3 overflow-y-auto overscroll-contain pr-1 flex-1 min-h-0">
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Academy name</label>
                 <input

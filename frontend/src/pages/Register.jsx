@@ -33,7 +33,10 @@ export default function Register() {
           user.message ||
             "Registration received. Check your email and click the confirmation link before signing in."
         );
-        navigate(redirect ? `/login?redirect=${encodeURIComponent(redirect)}` : "/login");
+        const q = new URLSearchParams();
+        q.set("email", email.trim().toLowerCase());
+        if (redirect) q.set("redirect", redirect);
+        navigate(`/verify-email?${q.toString()}`);
         return;
       }
       toast.success(`Welcome, ${user.name}!`);

@@ -246,4 +246,111 @@ class AdminController
 
         Response::textReport('donations-report.txt', implode("\n", $lines));
     }
+
+    public static function resellersCsv(): void
+    {
+        Auth::authorize('admin');
+        SchemaEnsure::resellerProfiles();
+        $rows = Database::queryAll(
+            'SELECT rp.*, r.name, l.email FROM reseller_profiles rp
+             JOIN registrations r ON rp.user_id = r.id
+             JOIN logins l ON l.registration_id = r.id
+             ORDER BY rp.created_at DESC'
+        );
+
+        $base = rtrim((string) (Env::get('CLIENT_URL') ?: Env::get('API_URL') ?: ''), '/');
+        $export = [];
+        foreach ($rows as $r) {
+            $bank = [];
+            $decoded = json_decode((string) ($r['bank_details'] ?? ''), true);
+            if (is_array($decoded)) {
+                $bank = $decoded;
+            }
+            $idDoc = (string) ($r['id_document_url'] ?? '');
+            $proof = (string) ($r['proof_of_account_url'] ?? '');
+            if ($base !== '' && $idDoc !== '' && str_starts_with($idDoc, '/')) {
+                $idDoc = $base . $idDoc;
+            }
+            if ($base !== '' && $proof !== '' && str_starts_with($proof, '/')) {
+                $proof = $base . $proof;
+            }
+            $export[] = [
+                'id' => $r['id'],
+                'name' => $r['name'],
+                'email' => $r['email'],
+                'academy' => $r['academy'] ?? '',
+                'referral_code' => $r['referral_code'],
+                'status' => $r['status'],
+                'wallet_balance' => $r['wallet_balance'],
+                'total_earned' => $r['total_earned'],
+                'account_name' => $bank['account_name'] ?? '',
+                'bank_name' => $bank['bank_name'] ?? '',
+                'account_number' => $bank['account_number'] ?? '',
+                'branch_code' => $bank['branch_code'] ?? '',
+                'account_type' => $bank['account_type'] ?? '',
+                'id_document_url' => $idDoc,
+                'proof_of_account_url' => $proof,
+                'created_at' => $r['created_at'],
+            ];
+        }
+
+        $fields = [
+            'id', 'name', 'email', 'academy', 'referral_code', 'status', 'wallet_balance', 'total_earned',
+            'account_name', 'bank_name', 'account_number', 'branch_code', 'account_type',
+            'id_document_url', 'proof_of_account_url', 'created_at',
+        ];
+        Response::csv('resellers-banking-report.csv', self::toCsv($export, $fields));
+    }
+
+    public static function resellersPdf(): void
+    {
+        Auth::authorize('admin');
+        SchemaEnsure::resellerProfiles();
+        $rows = Database::queryAll(
+            'SELECT rp.*, r.name, l.email FROM reseller_profiles rp
+             JOIN registrations r ON rp.user_id = r.id
+             JOIN logins l ON l.registration_id = r.id
+             ORDER BY rp.created_at DESC'
+        );
+
+        $base = rtrim((string) (Env::get('CLIENT_URL') ?: Env::get('API_URL') ?: ''), '/');
+        $lines = ['Village NetAcad — Reseller Banking Report', 'Generated: ' . date('c'), ''];
+        $lines[] = 'Total resellers: ' . count($rows);
+        $lines[] = '';
+
+        foreach ($rows as $r) {
+            $bank = [];
+            $decoded = json_decode((string) ($r['bank_details'] ?? ''), true);
+            if (is_array($decoded)) {
+                $bank = $decoded;
+            }
+            $idDoc = (string) ($r['id_document_url'] ?? '—');
+            $proof = (string) ($r['proof_of_account_url'] ?? '—');
+            if ($base !== '' && $idDoc !== '—' && str_starts_with($idDoc, '/')) {
+                $idDoc = $base . $idDoc;
+            }
+            if ($base !== '' && $proof !== '—' && str_starts_with($proof, '/')) {
+                $proof = $base . $proof;
+            }
+
+            $lines[] = '--- Reseller #' . $r['id'] . ' ---';
+            $lines[] = 'Name: ' . $r['name'];
+            $lines[] = 'Email: ' . $r['email'];
+            $lines[] = 'Academy: ' . ($r['academy'] ?: '—');
+            $lines[] = 'Referral: ' . $r['referral_code'];
+            $lines[] = 'Status: ' . $r['status'];
+            $lines[] = 'Wallet: R' . number_format((float) $r['wallet_balance'], 2);
+            $lines[] = 'Total earned: R' . number_format((float) $r['total_earned'], 2);
+            $lines[] = 'Account holder: ' . ($bank['account_name'] ?? '—');
+            $lines[] = 'Bank: ' . ($bank['bank_name'] ?? '—');
+            $lines[] = 'Account number: ' . ($bank['account_number'] ?? '—');
+            $lines[] = 'Branch code: ' . ($bank['branch_code'] ?? '—');
+            $lines[] = 'Account type: ' . ($bank['account_type'] ?? '—');
+            $lines[] = 'ID document: ' . $idDoc;
+            $lines[] = 'Proof of account: ' . $proof;
+            $lines[] = '';
+        }
+
+        Response::textReport('resellers-banking-report.txt', implode("\n", $lines));
+    }
 }

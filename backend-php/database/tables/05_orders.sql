@@ -2,6 +2,8 @@ CREATE TABLE IF NOT EXISTS orders (
   id INT AUTO_INCREMENT PRIMARY KEY,
   user_id INT NOT NULL,
   total DECIMAL(10,2) NOT NULL,
+  delivery_method VARCHAR(20) NOT NULL DEFAULT 'delivery',
+  shipping_fee DECIMAL(10,2) NOT NULL DEFAULT 0.00,
   status ENUM('pending','processing','shipped','delivered','cancelled') DEFAULT 'pending',
   shipping_address TEXT NOT NULL,
   payment_intent_id VARCHAR(255) DEFAULT NULL,

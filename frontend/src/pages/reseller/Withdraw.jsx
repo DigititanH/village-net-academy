@@ -40,6 +40,20 @@ export default function ResellerWithdraw() {
     load();
   }, []);
 
+  useEffect(() => {
+    if (!profile?.bank) return;
+    const b = profile.bank;
+    if (b.account_name || b.bank_name || b.account_number) {
+      setBank({
+        account_name: b.account_name || "",
+        bank_name: b.bank_name || "",
+        account_number: b.account_number || "",
+        branch_code: b.branch_code || "",
+        account_type: b.account_type || "Cheque",
+      });
+    }
+  }, [profile]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     const value = Number(amount);
@@ -102,7 +116,11 @@ export default function ResellerWithdraw() {
         <h1 className="text-2xl font-black bg-gradient-to-r from-burnt-400 to-primary-400 bg-clip-text text-transparent">
           Withdraw Earnings
         </h1>
-        <p className="text-sm text-gray-400 mt-1">Minimum withdrawal is R{MIN_WITHDRAWAL}. Enter your banking details to request payment.</p>
+        <p className="text-sm text-gray-400 mt-1">
+          Minimum withdrawal is R{MIN_WITHDRAWAL}. Banking details are filled from{" "}
+          <Link to="/reseller/banking" className="text-burnt-500 hover:underline">your saved banking profile</Link>
+          {" "}— update them there if needed.
+        </p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

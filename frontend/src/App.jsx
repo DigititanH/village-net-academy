@@ -16,6 +16,7 @@ import Career from "./pages/Career";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import VerifyEmail from "./pages/VerifyEmail";
 import Cart from "./pages/Cart";
 import Checkout from "./pages/Checkout";
@@ -36,6 +37,7 @@ import AdminAcademies from "./pages/admin/Academies";
 import ResellerDashboard from "./pages/reseller/Dashboard";
 import ResellerSales from "./pages/reseller/Sales";
 import ResellerWithdraw from "./pages/reseller/Withdraw";
+import ResellerBanking from "./pages/reseller/Banking";
 import AcademyDashboard from "./pages/academy/Dashboard";
 import AcademySales from "./pages/academy/Sales";
 export default function App() {
@@ -81,6 +83,8 @@ export default function App() {
           <Route path="/register" element={<Register />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/reset-password/:token" element={<ResetPassword />} />
           <Route path="/cart" element={<Cart />} />
           <Route path="/checkout" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
           <Route path="/my-orders" element={<ProtectedRoute><MyOrders /></ProtectedRoute>} />
@@ -109,6 +113,7 @@ export default function App() {
         <Route path="/reseller" element={<ProtectedRoute role="reseller" />}>
           <Route path="dashboard" element={<ResellerDashboard />} />
           <Route path="sales" element={<ResellerSales />} />
+          <Route path="banking" element={<ResellerBanking />} />
           <Route path="withdraw" element={<ResellerWithdraw />} />
         </Route>
 

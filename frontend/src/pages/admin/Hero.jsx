@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus, Pencil, Trash2, X, Image as ImageIcon } from "lucide-react";
+import { Plus, Pencil, Trash2, X, Image as ImageIcon, Replace } from "lucide-react";
 import api from "../../lib/api";
 import toast from "react-hot-toast";
 
@@ -11,9 +11,47 @@ const emptySlide = {
   subtitle: "",
   body: "",
   text_position: "center",
+  label_color: "#FDE68A",
+  title_color: "#FFFFFF",
+  title_highlight_color: "",
+  subtitle_color: "#F5F5F5",
+  body_color: "#E5E5E5",
   sort_order: "",
   is_active: "1",
 };
+
+function ColorField({ label, value, onChange, allowEmpty = false }) {
+  const display = value || (allowEmpty ? "#22C55E" : "#FFFFFF");
+  return (
+    <div>
+      <label className="block text-sm text-gray-400 mb-1">{label}</label>
+      <div className="flex items-center gap-2">
+        <input
+          type="color"
+          value={display}
+          onChange={(e) => onChange(e.target.value.toUpperCase())}
+          className="h-10 w-12 rounded border border-white/15 bg-transparent cursor-pointer"
+          title={label}
+        />
+        <input
+          className="input-field flex-1 font-mono text-sm"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={allowEmpty ? "Theme gradient (empty)" : "#FFFFFF"}
+        />
+        {allowEmpty && value && (
+          <button
+            type="button"
+            onClick={() => onChange("")}
+            className="text-xs px-2 py-2 rounded-lg border border-white/15 hover:bg-white/5"
+          >
+            Default
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 const textPositionOptions = [
   { value: "center", label: "Center" },
@@ -49,7 +87,9 @@ export default function AdminHero() {
   const [editingSlide, setEditingSlide] = useState(null);
   const [slideForm, setSlideForm] = useState(emptySlide);
   const [image, setImage] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
   const [slideSaving, setSlideSaving] = useState(false);
+  const [replacingId, setReplacingId] = useState(null);
   const [showButtonModal, setShowButtonModal] = useState(false);
   const [buttonSlideId, setButtonSlideId] = useState(null);
   const [editingButton, setEditingButton] = useState(null);
@@ -77,6 +117,7 @@ export default function AdminHero() {
     setEditingSlide(null);
     setSlideForm(emptySlide);
     setImage(null);
+    setImagePreview(null);
     setShowSlideModal(true);
   };
 
@@ -90,11 +131,33 @@ export default function AdminHero() {
       subtitle: slide.subtitle || "",
       body: slide.body || "",
       text_position: slide.text_position || "center",
+      label_color: slide.label_color || "#FDE68A",
+      title_color: slide.title_color || "#FFFFFF",
+      title_highlight_color: slide.title_highlight_color || "",
+      subtitle_color: slide.subtitle_color || "#F5F5F5",
+      body_color: slide.body_color || "#E5E5E5",
       sort_order: String(slide.sort_order ?? ""),
       is_active: String(slide.is_active ?? 1),
     });
     setImage(null);
+    setImagePreview(null);
     setShowSlideModal(true);
+  };
+
+  const onPickImage = (file) => {
+    if (!file) {
+      setImage(null);
+      setImagePreview(null);
+      return;
+    }
+    setImage(file);
+    setImagePreview(URL.createObjectURL(file));
+  };
+
+  const clearPickedImage = () => {
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImage(null);
+    setImagePreview(null);
   };
 
   const saveSlide = async (e) => {
@@ -114,17 +177,14 @@ export default function AdminHero() {
 
       let res;
       if (editingSlide) {
-        res = await api.post(`/hero/slides/${editingSlide.id}`, fd, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
+        res = await api.post(`/hero/slides/${editingSlide.id}`, fd);
       } else {
-        res = await api.post("/hero/slides", fd, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
+        res = await api.post("/hero/slides", fd);
       }
       applyHero(res.data.hero);
+      clearPickedImage();
       setShowSlideModal(false);
-      toast.success(editingSlide ? "Slide updated" : "Slide added");
+      toast.success(editingSlide ? (image ? "Slide image replaced" : "Slide updated") : "Slide added");
     } catch (err) {
       toast.error(err.response?.data?.message || "Failed to save slide");
     } finally {
@@ -132,12 +192,28 @@ export default function AdminHero() {
     }
   };
 
+  const replaceSlideImage = async (slide, file) => {
+    if (!file) return;
+    setReplacingId(slide.id);
+    try {
+      const fd = new FormData();
+      fd.append("image", file);
+      const res = await api.post(`/hero/slides/${slide.id}`, fd);
+      applyHero(res.data.hero);
+      toast.success("Slide image replaced");
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to replace image");
+    } finally {
+      setReplacingId(null);
+    }
+  };
+
   const deleteSlide = async (id) => {
-    if (!confirm("Delete this slide and its buttons?")) return;
+    if (!confirm("Remove this slide from the homepage slideshow? This cannot be undone.")) return;
     try {
       const res = await api.delete(`/hero/slides/${id}`);
       applyHero(res.data.hero);
-      toast.success("Slide deleted");
+      toast.success("Slide removed from slideshow");
     } catch (err) {
       toast.error(err.response?.data?.message || "Failed to delete");
     }
@@ -245,14 +321,40 @@ export default function AdminHero() {
         {(hero?.slides || []).map((slide) => (
           <div key={slide.id} className="card space-y-4">
             <div className="flex flex-col lg:flex-row gap-4">
-              <div className="w-full lg:w-56 flex-shrink-0 rounded-xl overflow-hidden border border-white/10 bg-black/40 aspect-video lg:aspect-[4/3]">
-                {slide.image_url || slide.image ? (
-                  <img src={slide.image_url || slide.image} alt={slide.alt_text || ""} className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-gray-500">
-                    <ImageIcon size={28} />
-                  </div>
-                )}
+              <div className="w-full lg:w-56 flex-shrink-0 space-y-2">
+                <div className="rounded-xl overflow-hidden border border-white/10 bg-black/40 aspect-video lg:aspect-[4/3]">
+                  {slide.image_url || slide.image ? (
+                    <img src={slide.image_url || slide.image} alt={slide.alt_text || ""} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-gray-500">
+                      <ImageIcon size={28} />
+                    </div>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <label className="flex-1 min-w-[7rem] cursor-pointer text-center text-xs font-semibold px-2.5 py-2 rounded-lg border border-white/15 hover:bg-white/5 inline-flex items-center justify-center gap-1">
+                    <Replace size={14} />
+                    {replacingId === slide.id ? "Uploading…" : "Replace image"}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={replacingId === slide.id}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = "";
+                        if (file) replaceSlideImage(slide, file);
+                      }}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => deleteSlide(slide.id)}
+                    className="text-xs font-semibold px-2.5 py-2 rounded-lg border border-red-500/30 text-red-300 hover:bg-red-500/10 inline-flex items-center gap-1"
+                  >
+                    <Trash2 size={14} /> Delete slide
+                  </button>
+                </div>
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2">
@@ -267,14 +369,9 @@ export default function AdminHero() {
                     </h2>
                     {slide.label && <p className="text-xs text-gray-400 mt-1">{slide.label}</p>}
                   </div>
-                  <div className="flex gap-1 flex-shrink-0">
-                    <button type="button" onClick={() => openEditSlide(slide)} className="p-2 rounded-lg hover:bg-white/10 text-gray-300">
-                      <Pencil size={16} />
-                    </button>
-                    <button type="button" onClick={() => deleteSlide(slide.id)} className="p-2 rounded-lg hover:bg-red-500/10 text-red-400">
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
+                  <button type="button" onClick={() => openEditSlide(slide)} className="p-2 rounded-lg hover:bg-white/10 text-gray-300" title="Edit text & settings">
+                    <Pencil size={16} />
+                  </button>
                 </div>
                 {slide.subtitle && <p className="text-sm text-gray-300 mt-3 line-clamp-2">{slide.subtitle}</p>}
                 {slide.body && <p className="text-sm text-gray-500 mt-2 line-clamp-2">{slide.body}</p>}
@@ -333,47 +430,115 @@ export default function AdminHero() {
       </div>
 
       {showSlideModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 overflow-y-auto">
-          <div className="w-full max-w-lg card relative my-8">
-            <button type="button" onClick={() => setShowSlideModal(false)} className="absolute right-3 top-3 p-1 text-gray-400 hover:text-white">
+        <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-4 bg-black/60 overflow-y-auto">
+          <div className="w-full max-w-lg card relative my-4 sm:my-8 max-h-[min(92vh,900px)] flex flex-col overflow-hidden">
+            <button type="button" onClick={() => setShowSlideModal(false)} className="absolute right-3 top-3 z-10 p-1 text-gray-400 hover:text-white">
               <X size={18} />
             </button>
-            <h3 className="text-lg font-semibold mb-4">{editingSlide ? "Edit slide" : "Add slide"}</h3>
-            <form onSubmit={saveSlide} className="space-y-3">
+            <h3 className="text-lg font-semibold mb-4 pr-8 shrink-0">{editingSlide ? "Edit slide" : "Add slide"}</h3>
+            <form onSubmit={saveSlide} className="space-y-3 overflow-y-auto overscroll-contain pr-1 flex-1 min-h-0">
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Image {editingSlide ? "(optional)" : ""}</label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => setImage(e.target.files?.[0] || null)}
-                  className="block w-full text-sm text-gray-300"
-                />
-                {editingSlide?.image_url && !image && (
-                  <img src={editingSlide.image_url} alt="" className="mt-2 w-full h-28 object-cover rounded-lg" />
-                )}
+                <label className="block text-sm text-gray-400 mb-1">
+                  {editingSlide ? "Slideshow image" : "Image *"}
+                </label>
+                <div className="rounded-xl overflow-hidden border border-white/10 bg-black/40 aspect-video mb-2">
+                  {imagePreview ? (
+                    <img src={imagePreview} alt="New selection" className="w-full h-full object-cover" />
+                  ) : editingSlide?.image_url || editingSlide?.image ? (
+                    <img src={editingSlide.image_url || editingSlide.image} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-gray-500 text-sm">
+                      No image selected
+                    </div>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <label className="cursor-pointer text-xs font-semibold px-3 py-2 rounded-lg border border-white/15 hover:bg-white/5 inline-flex items-center gap-1">
+                    <Replace size={14} />
+                    {editingSlide ? "Replace image" : "Choose image"}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => onPickImage(e.target.files?.[0] || null)}
+                    />
+                  </label>
+                  {image && (
+                    <button type="button" onClick={clearPickedImage} className="text-xs font-semibold px-3 py-2 rounded-lg border border-white/15 hover:bg-white/5">
+                      Cancel new file
+                    </button>
+                  )}
+                  {editingSlide && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!confirm("Delete this slide from the homepage slideshow?")) return;
+                        setShowSlideModal(false);
+                        deleteSlide(editingSlide.id);
+                      }}
+                      className="text-xs font-semibold px-3 py-2 rounded-lg border border-red-500/30 text-red-300 hover:bg-red-500/10 inline-flex items-center gap-1"
+                    >
+                      <Trash2 size={14} /> Delete slide
+                    </button>
+                  )}
+                </div>
+                {image && <p className="text-xs text-green-300 mt-2">New file ready: {image.name}</p>}
+                <p className="text-xs text-gray-500 mt-2">
+                  {editingSlide
+                    ? "Pick a new photo to replace the current slideshow image, or delete the whole slide."
+                    : "Upload the photo that appears on the homepage slideshow."}
+                </p>
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Label</label>
-                <input className="input-field" value={slideForm.label} onChange={(e) => setSlideForm({ ...slideForm, label: e.target.value })} />
+                <label className="block text-sm text-gray-400 mb-1">Label text</label>
+                <input className="input-field" value={slideForm.label} onChange={(e) => setSlideForm({ ...slideForm, label: e.target.value })} placeholder="Small label above the title" />
               </div>
+              <ColorField
+                label="Label color"
+                value={slideForm.label_color}
+                onChange={(v) => setSlideForm({ ...slideForm, label_color: v })}
+              />
               <div className="grid sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">Title</label>
+                  <label className="block text-sm text-gray-400 mb-1">Title text</label>
                   <input className="input-field" value={slideForm.title} onChange={(e) => setSlideForm({ ...slideForm, title: e.target.value })} />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">Title highlight</label>
+                  <label className="block text-sm text-gray-400 mb-1">Title highlight text</label>
                   <input className="input-field" value={slideForm.title_highlight} onChange={(e) => setSlideForm({ ...slideForm, title_highlight: e.target.value })} />
                 </div>
               </div>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <ColorField
+                  label="Title color"
+                  value={slideForm.title_color}
+                  onChange={(v) => setSlideForm({ ...slideForm, title_color: v })}
+                />
+                <ColorField
+                  label="Highlight color"
+                  value={slideForm.title_highlight_color}
+                  onChange={(v) => setSlideForm({ ...slideForm, title_highlight_color: v })}
+                  allowEmpty
+                />
+              </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Subtitle message</label>
+                <label className="block text-sm text-gray-400 mb-1">Subtitle text</label>
                 <textarea className="input-field min-h-[70px]" value={slideForm.subtitle} onChange={(e) => setSlideForm({ ...slideForm, subtitle: e.target.value })} />
               </div>
+              <ColorField
+                label="Subtitle color"
+                value={slideForm.subtitle_color}
+                onChange={(v) => setSlideForm({ ...slideForm, subtitle_color: v })}
+              />
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Body message</label>
+                <label className="block text-sm text-gray-400 mb-1">Body text</label>
                 <textarea className="input-field min-h-[90px]" value={slideForm.body} onChange={(e) => setSlideForm({ ...slideForm, body: e.target.value })} />
               </div>
+              <ColorField
+                label="Body color"
+                value={slideForm.body_color}
+                onChange={(v) => setSlideForm({ ...slideForm, body_color: v })}
+              />
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Wording position on slide</label>
                 <select
@@ -403,7 +568,7 @@ export default function AdminHero() {
                   </select>
                 </div>
               </div>
-              <button type="submit" disabled={slideSaving} className="btn-primary w-full rounded-xl py-2.5 disabled:opacity-60">
+              <button type="submit" disabled={slideSaving} className="btn-primary w-full rounded-xl py-2.5 disabled:opacity-60 sticky bottom-0">
                 {slideSaving ? "Saving…" : editingSlide ? "Update slide" : "Add slide"}
               </button>
             </form>
@@ -412,13 +577,13 @@ export default function AdminHero() {
       )}
 
       {showButtonModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
-          <div className="w-full max-w-md card relative">
-            <button type="button" onClick={() => setShowButtonModal(false)} className="absolute right-3 top-3 p-1 text-gray-400 hover:text-white">
+        <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-4 bg-black/60 overflow-y-auto">
+          <div className="w-full max-w-md card relative my-4 sm:my-8 max-h-[min(92vh,900px)] flex flex-col overflow-hidden">
+            <button type="button" onClick={() => setShowButtonModal(false)} className="absolute right-3 top-3 z-10 p-1 text-gray-400 hover:text-white">
               <X size={18} />
             </button>
-            <h3 className="text-lg font-semibold mb-4">{editingButton ? "Edit button" : "Add button"}</h3>
-            <form onSubmit={saveButton} className="space-y-4">
+            <h3 className="text-lg font-semibold mb-4 pr-8 shrink-0">{editingButton ? "Edit button" : "Add button"}</h3>
+            <form onSubmit={saveButton} className="space-y-4 overflow-y-auto overscroll-contain pr-1 flex-1 min-h-0">
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Button text</label>
                 <input className="input-field" value={buttonForm.label} onChange={(e) => setButtonForm({ ...buttonForm, label: e.target.value })} required />

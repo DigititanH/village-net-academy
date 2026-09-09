@@ -40,6 +40,19 @@ export default function MyOrders() {
                     <span className="font-black text-burnt-600">R{Number(order.total).toFixed(2)}</span>
                   </div>
                 </div>
+                <p className="text-sm text-gray-400 mb-1">
+                  {(() => {
+                    let addr = order.shipping_address;
+                    if (typeof addr === "string") {
+                      try { addr = JSON.parse(addr); } catch { addr = null; }
+                    }
+                    if (order.delivery_method === "collection") {
+                      const centre = addr?.collection_centre;
+                      return centre ? `Collection at ${centre} (free)` : "Collection at the centre (free)";
+                    }
+                    return `Delivery${order.shipping_fee != null ? ` — R${Number(order.shipping_fee).toFixed(2)}` : ""}`;
+                  })()}
+                </p>
                 {order.tracking_number && <p className="text-sm text-gray-400">Tracking: {order.tracking_number}</p>}
               </div>
             ))}

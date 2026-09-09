@@ -40,7 +40,9 @@ class Router
         // Auth
         self::post('/api/auth/register', [AuthController::class, 'register']);
         self::post('/api/auth/login', [AuthController::class, 'login']);
+        self::post('/api/auth/verify-email', [AuthController::class, 'verifyEmail']);
         self::get('/api/auth/verify-email', [AuthController::class, 'verifyEmail']);
+        self::post('/api/auth/resend-verification', [AuthController::class, 'resendVerification']);
         self::post('/api/auth/forgot-password', [AuthController::class, 'forgotPassword']);
         self::post('/api/auth/reset-password', [AuthController::class, 'resetPassword']);
         self::get('/api/auth/me', [AuthController::class, 'me']);
@@ -105,6 +107,7 @@ class Router
 
         // Resellers
         self::get('/api/resellers/profile', [ResellersController::class, 'profile']);
+        self::post('/api/resellers/profile/banking', [ResellersController::class, 'updateBanking']);
         self::get('/api/resellers/commissions', [ResellersController::class, 'commissions']);
         self::get('/api/resellers/sales', [ResellersController::class, 'sales']);
         self::post('/api/resellers/withdraw', [ResellersController::class, 'withdraw']);
@@ -133,6 +136,8 @@ class Router
         self::get('/api/admin/reports/sales/pdf', [AdminController::class, 'salesPdf']);
         self::get('/api/admin/reports/donations/csv', [AdminController::class, 'donationsCsv']);
         self::get('/api/admin/reports/donations/pdf', [AdminController::class, 'donationsPdf']);
+        self::get('/api/admin/reports/resellers/csv', [AdminController::class, 'resellersCsv']);
+        self::get('/api/admin/reports/resellers/pdf', [AdminController::class, 'resellersPdf']);
 
         // Notifications
         self::get('/api/notifications', [NotificationsController::class, 'index']);

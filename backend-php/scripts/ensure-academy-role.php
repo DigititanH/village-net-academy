@@ -30,3 +30,10 @@ if (!columnExists($pdo, 'registrations', 'academy_name')) {
 } else {
     echo "registrations.academy_name already exists\n";
 }
+
+if (!columnExists($pdo, 'registrations', 'verification_token')) {
+    $pdo->exec('ALTER TABLE registrations ADD COLUMN verification_token VARCHAR(255) DEFAULT NULL');
+    echo "Added registrations.verification_token\n";
+} else {
+    echo "registrations.verification_token already exists\n";
+}

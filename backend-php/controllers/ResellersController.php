@@ -30,6 +30,7 @@ class ResellersController
     public static function profile(): void
     {
         Auth::authorize('reseller');
+        SchemaEnsure::resellerProfiles();
         $row = Database::queryGet(
             'SELECT rp.*, r.name, l.email, r.is_approved FROM reseller_profiles rp
              JOIN registrations r ON rp.user_id = r.id
@@ -47,7 +48,89 @@ class ResellersController
             $row['is_approved'] = 'approved';
         }
 
+        $row['bank'] = self::decodeBank($row['bank_details'] ?? null);
         Response::json($row);
+    }
+
+    /** @return array<string, string> */
+    private static function decodeBank(mixed $raw): array
+    {
+        if (is_array($raw)) {
+            $data = $raw;
+        } else {
+            $decoded = json_decode((string) ($raw ?? ''), true);
+            $data = is_array($decoded) ? $decoded : [];
+        }
+        return [
+            'account_name' => trim((string) ($data['account_name'] ?? '')),
+            'bank_name' => trim((string) ($data['bank_name'] ?? '')),
+            'account_number' => trim((string) ($data['account_number'] ?? '')),
+            'branch_code' => trim((string) ($data['branch_code'] ?? '')),
+            'account_type' => trim((string) ($data['account_type'] ?? 'Cheque')) ?: 'Cheque',
+        ];
+    }
+
+    /** @return array{account_name:string,bank_name:string,account_number:string,branch_code:string,account_type:string}|null */
+    private static function normalizeBankInput(array $bankDetails): ?array
+    {
+        $accountName = trim((string) ($bankDetails['account_name'] ?? ''));
+        $bankName = trim((string) ($bankDetails['bank_name'] ?? ''));
+        $accountNumber = trim((string) ($bankDetails['account_number'] ?? ''));
+        $branchCode = trim((string) ($bankDetails['branch_code'] ?? ''));
+        $accountType = trim((string) ($bankDetails['account_type'] ?? 'Cheque'));
+        if ($accountName === '' || $bankName === '' || $accountNumber === '' || $branchCode === '') {
+            return null;
+        }
+        return [
+            'account_name' => $accountName,
+            'bank_name' => $bankName,
+            'account_number' => $accountNumber,
+            'branch_code' => $branchCode,
+            'account_type' => $accountType !== '' ? $accountType : 'Cheque',
+        ];
+    }
+
+    public static function updateBanking(): void
+    {
+        Auth::authorize('reseller');
+        SchemaEnsure::resellerProfiles();
+
+        $profile = Database::queryGet('SELECT * FROM reseller_profiles WHERE user_id = ?', [Auth::$user['id']]);
+        if (!$profile) {
+            Response::error('Reseller profile not found', 404);
+        }
+
+        $body = array_merge($_POST, Request::jsonBody());
+        $bankPayload = self::normalizeBankInput([
+            'account_name' => $body['account_name'] ?? '',
+            'bank_name' => $body['bank_name'] ?? '',
+            'account_number' => $body['account_number'] ?? '',
+            'branch_code' => $body['branch_code'] ?? '',
+            'account_type' => $body['account_type'] ?? 'Cheque',
+        ]);
+        if (!$bankPayload) {
+            Response::error('Please complete all banking details', 400);
+        }
+
+        $idDoc = Request::handleDocumentUpload($_FILES['id_document'] ?? null);
+        $proofDoc = Request::handleDocumentUpload($_FILES['proof_of_account'] ?? null);
+
+        $idUrl = $idDoc ?: ($profile['id_document_url'] ?? null);
+        $proofUrl = $proofDoc ?: ($profile['proof_of_account_url'] ?? null);
+
+        Database::queryRun(
+            'UPDATE reseller_profiles SET bank_details = ?, id_document_url = ?, proof_of_account_url = ?, updated_at = NOW() WHERE id = ?',
+            [json_encode($bankPayload), $idUrl, $proofUrl, $profile['id']]
+        );
+
+        $row = Database::queryGet(
+            'SELECT rp.*, r.name, l.email, r.is_approved FROM reseller_profiles rp
+             JOIN registrations r ON rp.user_id = r.id
+             JOIN logins l ON l.registration_id = r.id WHERE rp.id = ?',
+            [$profile['id']]
+        );
+        $row['bank'] = self::decodeBank($row['bank_details'] ?? null);
+        Response::json(['message' => 'Banking details saved', 'profile' => $row]);
     }
 
     public static function commissions(): void
@@ -89,6 +172,7 @@ class ResellersController
     {
         Auth::authorize('reseller');
         self::requireApprovedReseller();
+        SchemaEnsure::resellerProfiles();
         $body = Request::jsonBody();
         $amount = (float) ($body['amount'] ?? 0);
         $bankDetails = $body['bank_details'] ?? [];
@@ -96,20 +180,11 @@ class ResellersController
             $bankDetails = [];
         }
 
-        $accountName = trim((string) ($bankDetails['account_name'] ?? ''));
-        $bankName = trim((string) ($bankDetails['bank_name'] ?? ''));
-        $accountNumber = trim((string) ($bankDetails['account_number'] ?? ''));
-        $branchCode = trim((string) ($bankDetails['branch_code'] ?? ''));
-        $accountType = trim((string) ($bankDetails['account_type'] ?? ''));
-
         if ($amount < 100) {
             Response::error('Minimum withdrawal amount is R100', 400);
         }
-        if ($accountName === '' || $bankName === '' || $accountNumber === '' || $branchCode === '') {
-            Response::error('Please complete all banking details', 400);
-        }
 
-        $profile = Database::queryGet('SELECT id, wallet_balance FROM reseller_profiles WHERE user_id = ?', [Auth::$user['id']]);
+        $profile = Database::queryGet('SELECT * FROM reseller_profiles WHERE user_id = ?', [Auth::$user['id']]);
         if (!$profile) {
             Response::error('Profile not found', 404);
         }
@@ -117,21 +192,21 @@ class ResellersController
             Response::error('Insufficient balance', 400);
         }
 
-        $bankPayload = [
-            'account_name' => $accountName,
-            'bank_name' => $bankName,
-            'account_number' => $accountNumber,
-            'branch_code' => $branchCode,
-            'account_type' => $accountType !== '' ? $accountType : 'Cheque',
-        ];
+        $bankPayload = self::normalizeBankInput($bankDetails);
+        if (!$bankPayload) {
+            $bankPayload = self::normalizeBankInput(self::decodeBank($profile['bank_details'] ?? null));
+        }
+        if (!$bankPayload) {
+            Response::error('Please save your banking details before withdrawing', 400);
+        }
 
         Database::queryRun(
             'INSERT INTO withdrawals (reseller_id, amount, bank_details) VALUES (?, ?, ?)',
             [$profile['id'], $amount, json_encode($bankPayload)]
         );
         Database::queryRun(
-            'UPDATE reseller_profiles SET wallet_balance = wallet_balance - ? WHERE id = ?',
-            [$amount, $profile['id']]
+            'UPDATE reseller_profiles SET wallet_balance = wallet_balance - ?, bank_details = ?, updated_at = NOW() WHERE id = ?',
+            [$amount, json_encode($bankPayload), $profile['id']]
         );
 
         Mailer::send([
@@ -140,7 +215,9 @@ class ResellersController
             'subject' => "Withdrawal request: R$amount from " . Auth::$user['name'],
             'html' => '<p><strong>Reseller:</strong> ' . htmlspecialchars(Auth::$user['name']) . ' (' . htmlspecialchars(Auth::$user['email']) . ')</p>
                 <p><strong>Amount:</strong> R' . number_format($amount, 2) . '</p>
-                <p><strong>Bank details:</strong><br><pre>' . htmlspecialchars(json_encode($bankPayload, JSON_PRETTY_PRINT)) . '</pre></p>',
+                <p><strong>Bank details:</strong><br><pre>' . htmlspecialchars(json_encode($bankPayload, JSON_PRETTY_PRINT)) . '</pre></p>
+                <p><strong>ID document:</strong> ' . htmlspecialchars((string) ($profile['id_document_url'] ?? '—')) . '</p>
+                <p><strong>Proof of account:</strong> ' . htmlspecialchars((string) ($profile['proof_of_account_url'] ?? '—')) . '</p>',
         ]);
 
         Response::json(['message' => 'Withdrawal request submitted'], 201);
@@ -163,11 +240,17 @@ class ResellersController
     public static function adminAll(): void
     {
         Auth::authorize('admin');
-        Response::json(Database::queryAll(
+        SchemaEnsure::resellerProfiles();
+        $rows = Database::queryAll(
             'SELECT rp.*, r.name, l.email FROM reseller_profiles rp
              JOIN registrations r ON rp.user_id = r.id
              JOIN logins l ON l.registration_id = r.id ORDER BY rp.created_at DESC'
-        ));
+        );
+        foreach ($rows as &$row) {
+            $row['bank'] = self::decodeBank($row['bank_details'] ?? null);
+        }
+        unset($row);
+        Response::json($rows);
     }
 
     public static function adminStatus(array $params): void

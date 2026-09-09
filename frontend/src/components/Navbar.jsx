@@ -60,11 +60,11 @@ export default function Navbar() {
   return (
     <nav className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-[auto_1fr_auto] items-center gap-4 h-20">
-          <Link to="/" className="flex items-center gap-3 shrink-0 min-w-0">
-            <img src="/Village Netacad Programme (6).png" alt="Village NetAcad" className="h-16 w-auto object-contain flex-shrink-0" />
+        <div className="grid grid-cols-[minmax(0,auto)_1fr_minmax(0,auto)] items-center gap-2 sm:gap-4 h-16 sm:h-20">
+          <Link to="/" className="flex items-center gap-2 sm:gap-3 shrink-0 min-w-0">
+            <img src="/Village Netacad Programme (6).png" alt="Village NetAcad" className="h-10 sm:h-14 md:h-16 w-auto max-w-[120px] sm:max-w-none object-contain flex-shrink-0" />
             <div className="min-w-0 hidden sm:block">
-              <span className="font-display font-bold text-lg tracking-wide leading-tight block">
+              <span className="font-display font-bold text-base lg:text-lg tracking-wide leading-tight block">
                 <span className="text-burnt-600">Village</span>{" "}
                 <span className="text-slate-800">NetAcad</span>
               </span>
@@ -130,7 +130,7 @@ export default function Navbar() {
             ))}
           </div>
 
-          <div className="flex items-center justify-end gap-3 min-w-[148px] sm:min-w-[200px]">
+          <div className="flex items-center justify-end gap-1.5 sm:gap-3">
             <GlobalSearch />
 
             <Link to="/cart" className="p-2 rounded-xl hover:bg-slate-100 transition-colors relative text-slate-700 hover:text-burnt-600 flex-shrink-0">

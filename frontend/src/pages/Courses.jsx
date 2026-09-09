@@ -48,14 +48,14 @@ function CourseCover({ course }) {
         </div>
       )}
       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/15 to-transparent" />
-      <div className="absolute inset-x-0 bottom-0 flex items-center justify-between px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-white">
-        <span className="inline-flex items-center gap-1">
-          <Clock size={12} /> {course.hours} Hours
+      <div className="absolute inset-x-0 bottom-0 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-3 sm:px-4 py-2 text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-white">
+        <span className="inline-flex items-center gap-1 min-w-0">
+          <Clock size={12} className="shrink-0" /> {course.hours} Hours
         </span>
-        <span className="inline-flex items-center gap-1">
-          <LockOpen size={12} /> {course.price}
+        <span className="inline-flex items-center gap-1 min-w-0">
+          <LockOpen size={12} className="shrink-0" /> {course.price}
         </span>
-        <span>{course.level}</span>
+        <span className="min-w-0 truncate">{course.level}</span>
       </div>
     </div>
   );

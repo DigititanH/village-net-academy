@@ -20,6 +20,30 @@ class HeroController
         return in_array($pos, self::$textPositions, true) ? $pos : 'center';
     }
 
+    /** Allow empty (use theme default) or #RGB / #RRGGBB */
+    private static function normalizeColor(mixed $value, string $fallback = ''): string
+    {
+        $color = trim((string) $value);
+        if ($color === '') {
+            return $fallback;
+        }
+        if (preg_match('/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/', $color)) {
+            return strtoupper($color);
+        }
+        return $fallback;
+    }
+
+    private static function colorDefaults(): array
+    {
+        return [
+            'label_color' => '#FDE68A',
+            'title_color' => '#FFFFFF',
+            'title_highlight_color' => '',
+            'subtitle_color' => '#F5F5F5',
+            'body_color' => '#E5E5E5',
+        ];
+    }
+
     private static function defaults(): array
     {
         return [
@@ -107,22 +131,32 @@ class HeroController
     private static function loadPayload(bool $activeOnly): array
     {
         self::ensureSeeded();
+        SchemaEnsure::heroSlides();
 
+        $colorCols = 'label_color, title_color, title_highlight_color, subtitle_color, body_color';
         try {
-            $sql = 'SELECT id, image_url, alt_text, label, title, title_highlight, subtitle, body, text_position, sort_order, is_active FROM hero_slides';
+            $sql = "SELECT id, image_url, alt_text, label, title, title_highlight, subtitle, body, text_position, {$colorCols}, sort_order, is_active FROM hero_slides";
             if ($activeOnly) {
                 $sql .= ' WHERE is_active = 1';
             }
             $sql .= ' ORDER BY sort_order ASC, id ASC';
             $slides = Database::queryAll($sql);
         } catch (Throwable $e) {
-            // Older DBs may lack text_position — fall back
-            $sql = 'SELECT id, image_url, alt_text, label, title, title_highlight, subtitle, body, sort_order, is_active FROM hero_slides';
-            if ($activeOnly) {
-                $sql .= ' WHERE is_active = 1';
+            try {
+                $sql = 'SELECT id, image_url, alt_text, label, title, title_highlight, subtitle, body, text_position, sort_order, is_active FROM hero_slides';
+                if ($activeOnly) {
+                    $sql .= ' WHERE is_active = 1';
+                }
+                $sql .= ' ORDER BY sort_order ASC, id ASC';
+                $slides = Database::queryAll($sql);
+            } catch (Throwable $e2) {
+                $sql = 'SELECT id, image_url, alt_text, label, title, title_highlight, subtitle, body, sort_order, is_active FROM hero_slides';
+                if ($activeOnly) {
+                    $sql .= ' WHERE is_active = 1';
+                }
+                $sql .= ' ORDER BY sort_order ASC, id ASC';
+                $slides = Database::queryAll($sql);
             }
-            $sql .= ' ORDER BY sort_order ASC, id ASC';
-            $slides = Database::queryAll($sql);
         }
 
         $buttonsBySlide = [];
@@ -143,7 +177,8 @@ class HeroController
             $buttonsBySlide = [];
         }
 
-        $mappedSlides = array_map(static function (array $s) use ($buttonsBySlide): array {
+        $defaults = self::colorDefaults();
+        $mappedSlides = array_map(static function (array $s) use ($buttonsBySlide, $defaults): array {
             $id = (int) $s['id'];
             return [
                 'id' => $id,
@@ -157,6 +192,11 @@ class HeroController
                 'subtitle' => $s['subtitle'] ?? '',
                 'body' => $s['body'] ?? '',
                 'text_position' => self::normalizeTextPosition($s['text_position'] ?? 'center'),
+                'label_color' => self::normalizeColor($s['label_color'] ?? null, $defaults['label_color']),
+                'title_color' => self::normalizeColor($s['title_color'] ?? null, $defaults['title_color']),
+                'title_highlight_color' => self::normalizeColor($s['title_highlight_color'] ?? null, $defaults['title_highlight_color']),
+                'subtitle_color' => self::normalizeColor($s['subtitle_color'] ?? null, $defaults['subtitle_color']),
+                'body_color' => self::normalizeColor($s['body_color'] ?? null, $defaults['body_color']),
                 'sort_order' => (int) ($s['sort_order'] ?? 0),
                 'is_active' => (int) ($s['is_active'] ?? 1),
                 'buttons' => $buttonsBySlide[$id] ?? [],
@@ -196,6 +236,12 @@ class HeroController
         $subtitle = trim((string) ($_POST['subtitle'] ?? ''));
         $bodyText = trim((string) ($_POST['body'] ?? ''));
         $textPosition = self::normalizeTextPosition($_POST['text_position'] ?? 'center');
+        $defaults = self::colorDefaults();
+        $labelColor = self::normalizeColor($_POST['label_color'] ?? null, $defaults['label_color']);
+        $titleColor = self::normalizeColor($_POST['title_color'] ?? null, $defaults['title_color']);
+        $titleHighlightColor = self::normalizeColor($_POST['title_highlight_color'] ?? null, $defaults['title_highlight_color']);
+        $subtitleColor = self::normalizeColor($_POST['subtitle_color'] ?? null, $defaults['subtitle_color']);
+        $bodyColor = self::normalizeColor($_POST['body_color'] ?? null, $defaults['body_color']);
         $sortOrder = (int) ($_POST['sort_order'] ?? 0);
         $isActive = isset($_POST['is_active']) ? (int) $_POST['is_active'] : 1;
 
@@ -212,11 +258,21 @@ class HeroController
             $sortOrder = (int) ($max['m'] ?? 0) + 1;
         }
 
-        $result = Database::queryRun(
-            'INSERT INTO hero_slides (image_url, alt_text, label, title, title_highlight, subtitle, body, text_position, sort_order, is_active)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [$imageUrl, $alt, $label, $title, $titleHighlight, $subtitle, $bodyText, $textPosition, $sortOrder, $isActive ? 1 : 0]
-        );
+        SchemaEnsure::heroSlides();
+
+        try {
+            $result = Database::queryRun(
+                'INSERT INTO hero_slides (image_url, alt_text, label, title, title_highlight, subtitle, body, text_position, label_color, title_color, title_highlight_color, subtitle_color, body_color, sort_order, is_active)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [$imageUrl, $alt, $label, $title, $titleHighlight, $subtitle, $bodyText, $textPosition, $labelColor, $titleColor, $titleHighlightColor, $subtitleColor, $bodyColor, $sortOrder, $isActive ? 1 : 0]
+            );
+        } catch (Throwable $e) {
+            $result = Database::queryRun(
+                'INSERT INTO hero_slides (image_url, alt_text, label, title, title_highlight, subtitle, body, text_position, sort_order, is_active)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [$imageUrl, $alt, $label, $title, $titleHighlight, $subtitle, $bodyText, $textPosition, $sortOrder, $isActive ? 1 : 0]
+            );
+        }
 
         Response::json([
             'message' => 'Slide added',
@@ -235,6 +291,7 @@ class HeroController
         }
 
         $body = array_merge($_POST, Request::jsonBody());
+        $defaults = self::colorDefaults();
         $alt = array_key_exists('alt_text', $body) || array_key_exists('alt', $body)
             ? trim((string) ($body['alt_text'] ?? $body['alt'] ?? ''))
             : ($slide['alt_text'] ?? '');
@@ -248,6 +305,21 @@ class HeroController
         $textPosition = array_key_exists('text_position', $body)
             ? self::normalizeTextPosition($body['text_position'])
             : self::normalizeTextPosition($slide['text_position'] ?? 'center');
+        $labelColor = array_key_exists('label_color', $body)
+            ? self::normalizeColor($body['label_color'], $defaults['label_color'])
+            : self::normalizeColor($slide['label_color'] ?? null, $defaults['label_color']);
+        $titleColor = array_key_exists('title_color', $body)
+            ? self::normalizeColor($body['title_color'], $defaults['title_color'])
+            : self::normalizeColor($slide['title_color'] ?? null, $defaults['title_color']);
+        $titleHighlightColor = array_key_exists('title_highlight_color', $body)
+            ? self::normalizeColor($body['title_highlight_color'], $defaults['title_highlight_color'])
+            : self::normalizeColor($slide['title_highlight_color'] ?? null, $defaults['title_highlight_color']);
+        $subtitleColor = array_key_exists('subtitle_color', $body)
+            ? self::normalizeColor($body['subtitle_color'], $defaults['subtitle_color'])
+            : self::normalizeColor($slide['subtitle_color'] ?? null, $defaults['subtitle_color']);
+        $bodyColor = array_key_exists('body_color', $body)
+            ? self::normalizeColor($body['body_color'], $defaults['body_color'])
+            : self::normalizeColor($slide['body_color'] ?? null, $defaults['body_color']);
         $sortOrder = array_key_exists('sort_order', $body)
             ? (int) $body['sort_order']
             : (int) $slide['sort_order'];
@@ -256,6 +328,7 @@ class HeroController
             : (int) $slide['is_active'];
 
         $imageUrl = Request::handleUpload($_FILES['image'] ?? null);
+        $uploadedNew = (bool) $imageUrl;
         if (!$imageUrl && !empty($body['image_url'])) {
             $imageUrl = trim((string) $body['image_url']);
         }
@@ -263,10 +336,23 @@ class HeroController
             $imageUrl = $slide['image_url'];
         }
 
-        Database::queryRun(
-            'UPDATE hero_slides SET image_url = ?, alt_text = ?, label = ?, title = ?, title_highlight = ?, subtitle = ?, body = ?, text_position = ?, sort_order = ?, is_active = ? WHERE id = ?',
-            [$imageUrl, $alt, $label, $title, $titleHighlight, $subtitle, $bodyText, $textPosition, $sortOrder, $isActive ? 1 : 0, $id]
-        );
+        SchemaEnsure::heroSlides();
+
+        try {
+            Database::queryRun(
+                'UPDATE hero_slides SET image_url = ?, alt_text = ?, label = ?, title = ?, title_highlight = ?, subtitle = ?, body = ?, text_position = ?, label_color = ?, title_color = ?, title_highlight_color = ?, subtitle_color = ?, body_color = ?, sort_order = ?, is_active = ? WHERE id = ?',
+                [$imageUrl, $alt, $label, $title, $titleHighlight, $subtitle, $bodyText, $textPosition, $labelColor, $titleColor, $titleHighlightColor, $subtitleColor, $bodyColor, $sortOrder, $isActive ? 1 : 0, $id]
+            );
+        } catch (Throwable $e) {
+            Database::queryRun(
+                'UPDATE hero_slides SET image_url = ?, alt_text = ?, label = ?, title = ?, title_highlight = ?, subtitle = ?, body = ?, text_position = ?, sort_order = ?, is_active = ? WHERE id = ?',
+                [$imageUrl, $alt, $label, $title, $titleHighlight, $subtitle, $bodyText, $textPosition, $sortOrder, $isActive ? 1 : 0, $id]
+            );
+        }
+
+        if ($uploadedNew && !empty($slide['image_url']) && $slide['image_url'] !== $imageUrl) {
+            self::deleteUploadFile($slide['image_url']);
+        }
 
         Response::json(['message' => 'Slide updated', 'hero' => self::loadPayload(false)]);
     }
@@ -275,7 +361,7 @@ class HeroController
     {
         Auth::authorizeAdmin();
         $id = (int) ($params['id'] ?? 0);
-        $slide = Database::queryGet('SELECT id FROM hero_slides WHERE id = ?', [$id]);
+        $slide = Database::queryGet('SELECT id, image_url FROM hero_slides WHERE id = ?', [$id]);
         if (!$slide) {
             Response::error('Slide not found', 404);
         }
@@ -285,7 +371,25 @@ class HeroController
             // ignore
         }
         Database::queryRun('DELETE FROM hero_slides WHERE id = ?', [$id]);
+        if (!empty($slide['image_url'])) {
+            self::deleteUploadFile($slide['image_url']);
+        }
         Response::json(['message' => 'Slide deleted', 'hero' => self::loadPayload(false)]);
+    }
+
+    private static function deleteUploadFile(string $url): void
+    {
+        if (!str_starts_with($url, '/uploads/')) {
+            return;
+        }
+        $filename = basename($url);
+        if ($filename === '' || $filename === '.' || $filename === '..') {
+            return;
+        }
+        $path = Paths::getUploadsDir() . DIRECTORY_SEPARATOR . $filename;
+        if (is_file($path)) {
+            @unlink($path);
+        }
     }
 
     public static function createButton(): void

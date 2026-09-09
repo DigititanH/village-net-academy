@@ -47,21 +47,33 @@ export default function AdminOrders() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <h1 className="text-2xl font-black bg-gradient-to-r from-burnt-400 to-primary-400 bg-clip-text text-transparent">Orders ({orders.length})</h1>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button onClick={() => downloadReport("csv")} className="btn-secondary text-sm inline-flex items-center gap-2 !py-2 !px-4"><Download size={16} /> CSV</button>
           <button onClick={() => downloadReport("pdf")} className="btn-primary text-sm inline-flex items-center gap-2 !py-2 !px-4"><FileText size={16} /> PDF</button>
         </div>
       </div>
       <div className="card overflow-x-auto">
         <table className="w-full text-sm">
-          <thead><tr className="text-left text-gray-500 border-b dark:border-gray-700"><th className="pb-3">#</th><th className="pb-3">Customer</th><th className="pb-3">Total</th><th className="pb-3">Status</th><th className="pb-3">Date</th><th className="pb-3">Action</th></tr></thead>
+          <thead><tr className="text-left text-gray-500 border-b dark:border-gray-700"><th className="pb-3">#</th><th className="pb-3">Customer</th><th className="pb-3">Fulfillment</th><th className="pb-3">Total</th><th className="pb-3">Status</th><th className="pb-3">Date</th><th className="pb-3">Action</th></tr></thead>
           <tbody>
             {orders.map((o) => (
               <tr key={o.id} className="border-b dark:border-gray-800">
                 <td className="py-3 font-medium">{o.id}</td>
                 <td className="py-3">{o.customer_name}<br /><span className="text-xs text-gray-500">{o.customer_email}</span></td>
+                <td className="py-3 text-xs">
+                  {(() => {
+                    let addr = o.shipping_address;
+                    if (typeof addr === "string") {
+                      try { addr = JSON.parse(addr); } catch { addr = null; }
+                    }
+                    if (o.delivery_method === "collection") {
+                      return addr?.collection_centre ? `Collection: ${addr.collection_centre}` : "Collection (free)";
+                    }
+                    return `Delivery${o.shipping_fee != null ? ` R${Number(o.shipping_fee).toFixed(2)}` : ""}`;
+                  })()}
+                </td>
                 <td className="py-3 font-semibold">R{Number(o.total).toFixed(2)}</td>
                 <td className="py-3"><span className={`text-xs font-medium px-2 py-1 rounded-full capitalize ${statusColors[o.status]}`}>{o.status}</span></td>
                 <td className="py-3 text-gray-500">{new Date(o.created_at).toLocaleDateString()}</td>

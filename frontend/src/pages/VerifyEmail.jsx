@@ -1,13 +1,58 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { CheckCircle, Loader2, XCircle } from "lucide-react";
+import { CheckCircle, Loader2, XCircle, Mail } from "lucide-react";
 import api from "../lib/api";
+import toast from "react-hot-toast";
+
+function ResendForm({ initialEmail = "", onSent }) {
+  const [email, setEmail] = useState(initialEmail);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setEmail(initialEmail || "");
+  }, [initialEmail]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const res = await api.post("/auth/resend-verification", { email: email.trim().toLowerCase() });
+      toast.success(res.data?.message || "If needed, a new link was sent");
+      if (res.data?.email_sent === false) {
+        toast.error("Email could not be sent. Ask the admin to configure SMTP.");
+      }
+      onSent?.(email.trim().toLowerCase());
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Could not resend link");
+    }
+    setLoading(false);
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-3 text-left mt-4">
+      <label className="block text-sm font-semibold text-gray-300">Email used to register</label>
+      <input
+        type="email"
+        required
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        className="input-field"
+        autoComplete="email"
+      />
+      <button type="submit" disabled={loading} className="btn-primary w-full">
+        {loading ? "Sending…" : "Send another confirmation link"}
+      </button>
+    </form>
+  );
+}
 
 export default function VerifyEmail() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token") || "";
-  const [status, setStatus] = useState(token ? "loading" : "missing");
+  const emailFromQuery = searchParams.get("email") || "";
+  const [status, setStatus] = useState(token ? "loading" : emailFromQuery ? "pending" : "missing");
   const [message, setMessage] = useState("");
+  const [resendEmail, setResendEmail] = useState(emailFromQuery);
 
   useEffect(() => {
     if (!token) return;
@@ -53,21 +98,29 @@ export default function VerifyEmail() {
           <>
             <XCircle size={40} className="mx-auto mb-4 text-red-400" />
             <h1 className="text-xl font-bold mb-2">Confirmation failed</h1>
-            <p className="text-sm text-gray-400 mb-6">{message}</p>
-            <Link to="/register" className="btn-primary inline-flex">
-              Register again
+            <p className="text-sm text-gray-400 mb-2">{message}</p>
+            <p className="text-sm text-gray-500 mb-2">Request a new confirmation email below.</p>
+            <ResendForm initialEmail={resendEmail} onSent={setResendEmail} />
+            <Link to="/login" className="text-sm text-burnt-600 hover:underline mt-4 inline-block">
+              Back to Login
             </Link>
           </>
         )}
-        {status === "missing" && (
+        {(status === "missing" || status === "pending") && (
           <>
-            <XCircle size={40} className="mx-auto mb-4 text-red-400" />
-            <h1 className="text-xl font-bold mb-2">Missing confirmation link</h1>
-            <p className="text-sm text-gray-400 mb-6">
-              Open the confirmation email we sent you and click the link to activate your account.
+            <Mail size={40} className="mx-auto mb-4 text-burnt-400" />
+            <h1 className="text-xl font-bold mb-2">
+              {status === "pending" ? "Confirm your email" : "Need a confirmation link?"}
+            </h1>
+            <p className="text-sm text-gray-400 mb-2">
+              {status === "pending"
+                ? `We sent a confirmation link${resendEmail ? ` to ${resendEmail}` : ""}. Open that email to activate your account.`
+                : "Open the confirmation email we sent you, or request another link below."}
             </p>
-            <Link to="/register" className="btn-primary inline-flex">
-              Go to Register
+            <p className="text-sm text-gray-500 mb-2">Didn’t get it? Check spam, then request another link.</p>
+            <ResendForm initialEmail={resendEmail} onSent={setResendEmail} />
+            <Link to="/login" className="text-sm text-burnt-600 hover:underline mt-4 inline-block">
+              Back to Login
             </Link>
           </>
         )}

@@ -37,39 +37,43 @@ export default function Cart() {
   return (
     <div className="section-padding">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-4xl font-black mb-8 bg-gradient-to-r from-burnt-400 to-primary-400 bg-clip-text text-transparent">Shopping Cart</h1>
+        <h1 className="text-3xl sm:text-4xl font-black mb-6 sm:mb-8 bg-gradient-to-r from-burnt-400 to-primary-400 bg-clip-text text-transparent">Shopping Cart</h1>
         <div className="space-y-4">
           {items.map((item) => (
-            <div key={item.id} className="card flex items-center gap-4">
-              <div className="w-20 h-20 bg-white/5 rounded-xl overflow-hidden flex-shrink-0">
-                {item.image ? <img src={item.image} alt={item.name} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-gray-600"><ShoppingCart size={24} /></div>}
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-bold truncate">{item.name}</h3>
-                <div className="flex flex-wrap items-center gap-2 mt-1">
-                  {parseProductOptions(item.available_sizes).length > 0 ? (
-                    <select
-                      value={item.size || ""}
-                      onChange={(e) => updateSize(item.id, e.target.value)}
-                      className="select-field-sm"
-                    >
-                      <option value="">Select Size</option>
-                      {parseProductOptions(item.available_sizes).map((s) => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  ) : item.size ? (
-                    <span className="text-sm text-gray-400">Size: {item.size}</span>
-                  ) : null}
-                  {item.color && <span className="text-sm text-gray-400">Color: {item.color}</span>}
+            <div key={item.id} className="card flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+              <div className="flex items-start gap-3 min-w-0 flex-1">
+                <div className="w-16 h-16 sm:w-20 sm:h-20 bg-white/5 rounded-xl overflow-hidden flex-shrink-0">
+                  {item.image ? <img src={item.image} alt={item.name} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-gray-600"><ShoppingCart size={24} /></div>}
                 </div>
-                <p className="font-bold text-burnt-600 mt-1">R{Number(item.price).toFixed(2)}</p>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-bold truncate">{item.name}</h3>
+                  <div className="flex flex-wrap items-center gap-2 mt-1">
+                    {parseProductOptions(item.available_sizes).length > 0 ? (
+                      <select
+                        value={item.size || ""}
+                        onChange={(e) => updateSize(item.id, e.target.value)}
+                        className="select-field-sm max-w-full"
+                      >
+                        <option value="">Select Size</option>
+                        {parseProductOptions(item.available_sizes).map((s) => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    ) : item.size ? (
+                      <span className="text-sm text-gray-400">Size: {item.size}</span>
+                    ) : null}
+                    {item.color && <span className="text-sm text-gray-400">Color: {item.color}</span>}
+                  </div>
+                  <p className="font-bold text-burnt-600 mt-1">R{Number(item.price).toFixed(2)}</p>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <button onClick={() => updateQuantity(item.id, item.quantity - 1)} className="p-1.5 rounded-xl hover:bg-white/10 transition-colors"><Minus size={16} /></button>
-                <span className="w-8 text-center font-bold">{item.quantity}</span>
-                <button onClick={() => updateQuantity(item.id, item.quantity + 1)} className="p-1.5 rounded-xl hover:bg-white/10 transition-colors"><Plus size={16} /></button>
+              <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4 pl-[4.75rem] sm:pl-0">
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={() => updateQuantity(item.id, item.quantity - 1)} className="p-2 rounded-xl hover:bg-white/10 transition-colors" aria-label="Decrease quantity"><Minus size={16} /></button>
+                  <span className="w-8 text-center font-bold">{item.quantity}</span>
+                  <button type="button" onClick={() => updateQuantity(item.id, item.quantity + 1)} className="p-2 rounded-xl hover:bg-white/10 transition-colors" aria-label="Increase quantity"><Plus size={16} /></button>
+                </div>
+                <p className="font-black text-right text-burnt-600 shrink-0">R{(item.price * item.quantity).toFixed(2)}</p>
+                <button type="button" onClick={() => removeItem(item.id)} className="p-2 text-red-400 hover:bg-red-500/10 rounded-xl transition-colors" aria-label="Remove item"><Trash2 size={18} /></button>
               </div>
-              <p className="font-black w-24 text-right text-burnt-600">R{(item.price * item.quantity).toFixed(2)}</p>
-              <button onClick={() => removeItem(item.id)} className="p-2 text-red-400 hover:bg-red-500/10 rounded-xl transition-colors"><Trash2 size={18} /></button>
             </div>
           ))}
         </div>
