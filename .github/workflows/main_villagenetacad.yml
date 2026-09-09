@@ -1,0 +1,102 @@
+# Build and deploy Village NetAcad (PHP + React) to Azure App Service
+# Connected from Azure Portal — uses publish profile secret below.
+# Stack: Linux PHP 8.2 (NOT Python)
+
+name: Build and deploy PHP app to Azure Web App - villagenetacad
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: "22"
+  PHP_VERSION: "8.2"
+  AZURE_WEBAPP_NAME: villagenetacad
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: pdo_sqlite, pdo_mysql, mbstring, curl, fileinfo, json
+
+      - name: Install frontend dependencies
+        run: npm run install:all
+
+      - name: Build frontend and sync into public/
+        shell: pwsh
+        run: ./deploy/prepare-production.ps1
+
+      - name: Package for Azure
+        shell: pwsh
+        run: |
+          # prepare-production already ran; stage zip without rebuilding
+          $root = "${{ github.workspace }}"
+          $azureDir = Join-Path $root "deploy/azure"
+          $temp = Join-Path $env:RUNNER_TEMP "village-netacad-azure"
+          if (Test-Path $temp) { Remove-Item $temp -Recurse -Force }
+          New-Item -ItemType Directory -Path $temp | Out-Null
+          Copy-Item (Join-Path $root "backend-php/*") $temp -Recurse -Force
+          @(".env", ".env.local") | ForEach-Object {
+            $p = Join-Path $temp $_
+            if (Test-Path $p) { Remove-Item $p -Force }
+          }
+          $dbDir = Join-Path $temp "database"
+          @("database.sqlite", "database.sqlite-wal", "database.sqlite-shm") | ForEach-Object {
+            foreach ($base in @($temp, $dbDir)) {
+              $p = Join-Path $base $_
+              if (Test-Path $p) { Remove-Item $p -Force }
+            }
+          }
+          $azureDeploy = Join-Path $temp "deploy/azure"
+          New-Item -ItemType Directory -Path $azureDeploy -Force | Out-Null
+          Copy-Item (Join-Path $azureDir "AZURE.md") $azureDeploy -Force
+          Copy-Item (Join-Path $azureDir "env.azure.template") $azureDeploy -Force
+          Copy-Item (Join-Path $azureDir "nginx-default.conf") $azureDeploy -Force
+          Copy-Item (Join-Path $azureDir "startup.sh") (Join-Path $temp "startup.sh") -Force
+          $release = Join-Path $azureDir "release.zip"
+          if (Test-Path $release) { Remove-Item $release -Force }
+          Compress-Archive -Path "$temp/*" -DestinationPath $release
+
+      - name: Upload artifact for deployment
+        uses: actions/upload-artifact@v4
+        with:
+          name: village-netacad-azure
+          path: deploy/azure/release.zip
+          retention-days: 14
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: village-netacad-azure
+          path: deploy/azure
+
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v3
+        id: deploy-to-webapp
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          slot-name: Production
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_3DDA55F1552E4E2FB15E3DC8A195CD42 }}
+          package: deploy/azure/release.zip

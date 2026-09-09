@@ -1,0 +1,6 @@
+# Redirect/rewrite all web traffic to the public front-controller folder
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{REQUEST_URI} !^/backend-php/public/
+    RewriteRule ^(.*)$ backend-php/public/$1 [L]
+</IfModule>

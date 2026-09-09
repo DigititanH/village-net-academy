@@ -1,0 +1,439 @@
+import { useState, useEffect, useMemo } from "react";
+import { Plus, Pencil, Trash2, X } from "lucide-react";
+import api from "../../lib/api";
+import toast from "react-hot-toast";
+import { productTypeLabel, typesForDepartment } from "../../lib/productTypes";
+
+const emptyForm = {
+  name: "",
+  description: "",
+  price: "",
+  compare_price: "",
+  category_id: "",
+  subcategory: "",
+  stock: "",
+  sizes: "",
+  colors: "",
+  is_active: "1",
+};
+
+const DEPARTMENT_SLUGS = ["merchandise", "electronics"];
+
+function appendFormData(fd, form) {
+  const skipIfEmpty = new Set(["compare_price", "category_id", "subcategory", "sizes"]);
+  Object.entries(form).forEach(([k, v]) => {
+    if (v === null || v === undefined) return;
+    if (skipIfEmpty.has(k) && v === "") return;
+    fd.append(k, String(v));
+  });
+}
+
+export default function AdminProducts() {
+  const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const ALL_SIZES = ["XS", "S", "M", "L", "XL", "XXL"];
+  const [form, setForm] = useState(emptyForm);
+  const [image, setImage] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const departments = useMemo(
+    () =>
+      categories
+        .filter((c) => DEPARTMENT_SLUGS.includes(c.slug))
+        .sort((a, b) => DEPARTMENT_SLUGS.indexOf(a.slug) - DEPARTMENT_SLUGS.indexOf(b.slug)),
+    [categories]
+  );
+
+  const selectedDepartment = useMemo(
+    () => departments.find((c) => String(c.id) === String(form.category_id)) || null,
+    [departments, form.category_id]
+  );
+
+  const departmentSlug = useMemo(() => {
+    if (!selectedDepartment) return "";
+    const slug = String(selectedDepartment.slug || "").toLowerCase();
+    if (DEPARTMENT_SLUGS.includes(slug)) return slug;
+    const name = String(selectedDepartment.name || "").toLowerCase();
+    if (name.includes("electronic")) return "electronics";
+    if (name.includes("merchandise")) return "merchandise";
+    return slug;
+  }, [selectedDepartment]);
+
+  const isElectronics = departmentSlug === "electronics";
+  const isMerchandise = departmentSlug === "merchandise";
+  const showSizes = isMerchandise;
+  const typeOptions = typesForDepartment(departmentSlug);
+
+  const fetchData = async () => {
+    try {
+      const [p, c] = await Promise.all([
+        api.get("/products/admin/all"),
+        api.get("/products/meta/categories"),
+      ]);
+      setProducts(p.data.products || []);
+      setCategories(c.data || []);
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to load products");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const openNew = () => {
+    setEditing(null);
+    setForm(emptyForm);
+    setImage(null);
+    setShowModal(true);
+  };
+
+  const openEdit = (p) => {
+    setEditing(p);
+    setForm({
+      name: p.name || "",
+      description: p.description || "",
+      price: String(p.price ?? ""),
+      compare_price: p.compare_price != null && p.compare_price !== "" ? String(p.compare_price) : "",
+      category_id: p.category_id ? String(p.category_id) : "",
+      subcategory: p.subcategory || "",
+      stock: String(p.stock ?? 0),
+      sizes: p.sizes || "",
+      colors: p.colors || "",
+      is_active: String(p.is_active ?? 1),
+    });
+    setImage(null);
+    setShowModal(true);
+  };
+
+  const handleCategoryChange = (categoryId) => {
+    const dept = departments.find((c) => String(c.id) === String(categoryId));
+    const slug = String(dept?.slug || "").toLowerCase();
+    const isElec = slug === "electronics" || String(dept?.name || "").toLowerCase().includes("electronic");
+    setForm((prev) => ({
+      ...prev,
+      category_id: categoryId,
+      subcategory: "",
+      sizes: isElec ? "" : prev.sizes,
+    }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.category_id) {
+      toast.error("Please select Merchandise or Electronics");
+      return;
+    }
+    if (isElectronics && !form.subcategory) {
+      toast.error("Please select Laptop, Tablet, or Accessories");
+      return;
+    }
+    if (isMerchandise && !form.subcategory) {
+      toast.error("Please select Hoodie, T-shirt, Cap, or Golf t-shirt");
+      return;
+    }
+
+    const payload = {
+      ...form,
+      subcategory: form.subcategory || "",
+      sizes: showSizes ? form.sizes : "",
+    };
+
+    const fd = new FormData();
+    appendFormData(fd, payload);
+    if (!payload.subcategory) fd.append("subcategory", "");
+    if (image) fd.append("image", image);
+
+    setSaving(true);
+    try {
+      if (editing) {
+        await api.post(`/products/${editing.id}`, fd, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        toast.success("Product updated");
+      } else {
+        await api.post("/products", fd, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        toast.success("Product created");
+      }
+      setShowModal(false);
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to save product");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!confirm("Delete this product?")) return;
+    try {
+      await api.delete(`/products/${id}`);
+      toast.success("Product deleted");
+      fetchData();
+    } catch {
+      toast.error("Failed to delete");
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin h-8 w-8 border-4 border-primary-500 border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-black bg-gradient-to-r from-burnt-400 to-primary-400 bg-clip-text text-transparent">
+          Products ({products.length})
+        </h1>
+        <button onClick={openNew} className="btn-primary text-sm inline-flex items-center gap-2">
+          <Plus size={16} /> Add Product
+        </button>
+      </div>
+
+      <div className="card overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-gray-500 border-b dark:border-gray-700">
+              <th className="pb-3">Image</th>
+              <th className="pb-3">Product</th>
+              <th className="pb-3">Category</th>
+              <th className="pb-3">Type</th>
+              <th className="pb-3">Price</th>
+              <th className="pb-3">Stock</th>
+              <th className="pb-3">Status</th>
+              <th className="pb-3">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {products.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="py-8 text-center text-gray-500">
+                  No products yet. Click Add Product to create one.
+                </td>
+              </tr>
+            ) : (
+              products.map((p) => (
+                <tr key={p.id} className="border-b dark:border-gray-800">
+                  <td className="py-3">
+                    {p.image ? (
+                      <img src={p.image} alt={p.name} className="w-12 h-12 rounded-lg object-cover" />
+                    ) : (
+                      <div className="w-12 h-12 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-400 text-xs">
+                        No img
+                      </div>
+                    )}
+                  </td>
+                  <td className="py-3 font-medium">{p.name}</td>
+                  <td className="py-3">{p.category_name || "-"}</td>
+                  <td className="py-3">{productTypeLabel(p.subcategory) || "-"}</td>
+                  <td className="py-3">R{Number(p.price).toFixed(2)}</td>
+                  <td className="py-3">{p.stock}</td>
+                  <td className="py-3">
+                    <span
+                      className={`text-xs px-2 py-1 rounded-full ${
+                        Number(p.is_active) === 1
+                          ? "bg-green-900/30 text-green-400"
+                          : "bg-gray-800 text-gray-400"
+                      }`}
+                    >
+                      {Number(p.is_active) === 1 ? "Active" : "Hidden"}
+                    </span>
+                  </td>
+                  <td className="py-3">
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        onClick={() => openEdit(p)}
+                        className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
+                        title="Edit product"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(p.id)}
+                        className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500"
+                        title="Delete product"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {showModal && (
+        <div className="fixed inset-0 glass-clear z-50 flex items-center justify-center p-4">
+          <div className="card w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold">{editing ? "Edit" : "Add"} Product</h2>
+              <button type="button" onClick={() => setShowModal(false)} className="p-1">
+                <X size={20} />
+              </button>
+            </div>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <input
+                required
+                placeholder="Product Name"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                className="input-field"
+              />
+              <textarea
+                placeholder="Description"
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+                className="input-field"
+                rows={3}
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <input
+                  required
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="Price"
+                  value={form.price}
+                  onChange={(e) => setForm({ ...form, price: e.target.value })}
+                  className="input-field"
+                />
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="Compare Price"
+                  value={form.compare_price}
+                  onChange={(e) => setForm({ ...form, compare_price: e.target.value })}
+                  className="input-field"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">Department</label>
+                <select
+                  required
+                  value={form.category_id}
+                  onChange={(e) => handleCategoryChange(e.target.value)}
+                  className="input-field"
+                >
+                  <option value="">Select Merchandise or Electronics</option>
+                  {departments.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {typeOptions.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    {isElectronics ? "Electronics type" : "Merchandise type"}
+                  </label>
+                  <select
+                    required
+                    value={form.subcategory}
+                    onChange={(e) => setForm({ ...form, subcategory: e.target.value })}
+                    className="input-field"
+                  >
+                    <option value="">Select type</option>
+                    {typeOptions.map((t) => (
+                      <option key={t.value} value={t.value}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <input
+                type="number"
+                min="0"
+                placeholder="Stock"
+                value={form.stock}
+                onChange={(e) => setForm({ ...form, stock: e.target.value })}
+                className="input-field"
+              />
+
+              {showSizes && (
+                <div>
+                  <label className="block text-sm font-medium mb-2">Sizes</label>
+                  <div className="flex flex-wrap gap-2">
+                    {ALL_SIZES.map((s) => {
+                      let selected = [];
+                      try {
+                        selected = JSON.parse(form.sizes || "[]");
+                      } catch {
+                        selected = [];
+                      }
+                      const isChecked = selected.includes(s);
+                      return (
+                        <label
+                          key={s}
+                          className={`px-3 py-1.5 rounded-lg border text-sm font-medium cursor-pointer transition-colors ${
+                            isChecked
+                              ? "bg-primary-600 text-white border-primary-600"
+                              : "border-gray-300 dark:border-gray-600 hover:border-primary-400"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            className="sr-only"
+                            checked={isChecked}
+                            onChange={() => {
+                              const current = isChecked
+                                ? selected.filter((x) => x !== s)
+                                : [...selected, s];
+                              setForm({ ...form, sizes: current.length ? JSON.stringify(current) : "" });
+                            }}
+                          />
+                          {s}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              <input
+                placeholder='Colors: Black, White (or JSON ["Black","White"])'
+                value={form.colors}
+                onChange={(e) => setForm({ ...form, colors: e.target.value })}
+                className="input-field"
+              />
+              {editing?.image && !image && (
+                <div className="flex items-center gap-3">
+                  <img src={editing.image} alt="" className="w-16 h-16 rounded-lg object-cover" />
+                  <p className="text-xs text-gray-500">Current image — upload a new file to replace it</p>
+                </div>
+              )}
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => setImage(e.target.files?.[0] || null)}
+                className="input-field"
+              />
+              <button type="submit" disabled={saving} className="btn-primary w-full">
+                {saving ? "Saving..." : editing ? "Update Product" : "Create Product"}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

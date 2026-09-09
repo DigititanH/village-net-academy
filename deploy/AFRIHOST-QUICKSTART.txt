@@ -1,0 +1,19 @@
+# Village NetAcad — Afrihost deploy package
+# =========================================
+# Full guide: deploy/AFRIHOST.md
+#
+# QUICK PATH
+# 1) Extract this zip under public_html (e.g. village-netacad/)
+# 2) cPanel Domains → Document Root = .../backend-php/public
+# 3) Create MySQL DB + user (All Privileges)
+# 4) Create writable folder: /home/YOUR_USER/village-netacad-data/uploads
+# 5) backend-php/.env is already in the zip — edit SMTP_PASS / MAIL_PASSWORD if needed
+# 6) phpMyAdmin → Import backend-php/database/import.sql
+#    OR SSH: cd backend-php && php scripts/post-deploy.php
+# 7) Enable AutoSSL
+# 8) Test: /health  |  register email  |  login  |  shop  |  PayFast
+#
+# Default admin after import: admin@villagenetacad.com / Admin123!
+# CHANGE THIS PASSWORD IMMEDIATELY.
+#
+# This zip never includes backend-php/.env (create it on the server).

@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+
+# Build output (frontend/dist is committed for GitHub Pages / direct deploy)
+backend-php/public/index.html
+backend-php/public/assets/
+.output/
+
+# Environment
+.env
+.env.local
+.env.production
+backend-php/.env
+deploy/env.afrihost.env
+
+# Database & uploads (local dev)
+backend-php/database/database.sqlite
+backend-php/database/database.sqlite-wal
+backend-php/database/database.sqlite-shm
+backend-php/uploads/*
+!backend-php/uploads/.gitkeep
+
+# Deploy artifacts
+village-netacad-afrihost.zip
+village-netacad-azure.zip
+deploy/azure/release.zip
+deploy/azure/publish-profile.xml
+*.zip
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+
+# Legacy / tooling (not used)
+.tanstack/
+.vinxi/
+.venv/
+__pycache__/

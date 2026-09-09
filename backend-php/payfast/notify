@@ -1,0 +1,14 @@
+<?php
+
+header('HTTP/1.0 200 OK');
+
+file_put_contents(
+    __DIR__ . '/payfast.log',
+    date('Y-m-d H:i:s') . PHP_EOL .
+    print_r($_POST, true) . PHP_EOL,
+    FILE_APPEND
+);
+
+echo "PayFast ITN endpoint active";
+
+exit;
