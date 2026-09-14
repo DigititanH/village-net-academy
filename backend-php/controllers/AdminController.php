@@ -65,9 +65,12 @@ class AdminController
         $page = max(1, (int) Request::query('page', 1));
         $limit = max(1, (int) Request::query('limit', 20));
 
-        $sql = 'SELECT r.id, r.name, l.email, r.role, r.avatar, r.phone, r.is_verified, r.is_approved, r.created_at
+        $sql = 'SELECT r.id, r.name, l.email, r.role, r.avatar, r.phone, r.academy_name, r.is_verified, r.is_approved, r.created_at,
+                       rp.academy AS reseller_centre, rp.commission_rate AS reseller_commission_rate
                 FROM registrations r
-                JOIN logins l ON l.registration_id = r.id WHERE 1=1';
+                JOIN logins l ON l.registration_id = r.id
+                LEFT JOIN reseller_profiles rp ON rp.user_id = r.id
+                WHERE 1=1';
         $params = [];
         if ($role) {
             $sql .= ' AND r.role = ?';
@@ -93,7 +96,7 @@ class AdminController
         Auth::authorize('admin');
         $body = Request::jsonBody();
         $role = $body['role'] ?? '';
-        if (!in_array($role, ['admin', 'super_admin', 'reseller', 'customer'], true)) {
+        if (!in_array($role, ['admin', 'super_admin', 'reseller', 'customer', 'academy'], true)) {
             Response::error('Invalid role', 400);
         }
         Database::queryRun('UPDATE registrations SET role = ? WHERE id = ?', [$role, $params['id']]);
@@ -274,11 +277,16 @@ class AdminController
             if ($base !== '' && $proof !== '' && str_starts_with($proof, '/')) {
                 $proof = $base . $proof;
             }
+            $aff = Commission::resellerAffiliationInfo($r['academy'] ?? null);
             $export[] = [
                 'id' => $r['id'],
                 'name' => $r['name'],
                 'email' => $r['email'],
+                'affiliation' => $aff['affiliation_label'],
+                'centre' => $aff['centre_display'],
                 'academy' => $r['academy'] ?? '',
+                'commission_rate' => $r['commission_rate'] ?? Commission::RESELLER_RATE,
+                'centre_rate' => Commission::ACADEMY_RATE,
                 'referral_code' => $r['referral_code'],
                 'status' => $r['status'],
                 'wallet_balance' => $r['wallet_balance'],
@@ -295,7 +303,8 @@ class AdminController
         }
 
         $fields = [
-            'id', 'name', 'email', 'academy', 'referral_code', 'status', 'wallet_balance', 'total_earned',
+            'id', 'name', 'email', 'affiliation', 'centre', 'academy', 'commission_rate', 'centre_rate',
+            'referral_code', 'status', 'wallet_balance', 'total_earned',
             'account_name', 'bank_name', 'account_number', 'branch_code', 'account_type',
             'id_document_url', 'proof_of_account_url', 'created_at',
         ];
@@ -333,10 +342,15 @@ class AdminController
                 $proof = $base . $proof;
             }
 
+            $aff = Commission::resellerAffiliationInfo($r['academy'] ?? null);
             $lines[] = '--- Reseller #' . $r['id'] . ' ---';
             $lines[] = 'Name: ' . $r['name'];
             $lines[] = 'Email: ' . $r['email'];
+            $lines[] = 'Affiliation: ' . $aff['affiliation_label'];
+            $lines[] = 'Centre / Programme: ' . $aff['centre_display'];
             $lines[] = 'Academy: ' . ($r['academy'] ?: '—');
+            $lines[] = 'Reseller rate: ' . ($r['commission_rate'] ?? Commission::RESELLER_RATE) . '%';
+            $lines[] = 'Centre rate: ' . Commission::ACADEMY_RATE . '%';
             $lines[] = 'Referral: ' . $r['referral_code'];
             $lines[] = 'Status: ' . $r['status'];
             $lines[] = 'Wallet: R' . number_format((float) $r['wallet_balance'], 2);

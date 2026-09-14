@@ -140,6 +140,26 @@ class SchemaEnsure
         }
     }
 
+    public static function products(): void
+    {
+        static $done = false;
+        if ($done) {
+            return;
+        }
+        $done = true;
+
+        try {
+            $pdo = Database::connection();
+            if (!self::columnExists($pdo, 'products', 'subcategory')) {
+                $pdo->exec('ALTER TABLE products ADD COLUMN subcategory VARCHAR(80) DEFAULT NULL');
+            }
+            $pdo->exec("INSERT IGNORE INTO categories (name, slug) VALUES ('Merchandise', 'merchandise')");
+            $pdo->exec("INSERT IGNORE INTO categories (name, slug) VALUES ('Electronics', 'electronics')");
+        } catch (Throwable $e) {
+            error_log('[SchemaEnsure] products: ' . $e->getMessage());
+        }
+    }
+
     private static function columnExists(PDO $pdo, string $table, string $column): bool
     {
         $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);

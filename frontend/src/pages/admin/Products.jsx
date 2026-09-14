@@ -183,6 +183,11 @@ export default function AdminProducts() {
         await api.post(`/products/${editing.id}`, fd);
         toast.success("Product updated");
       } else {
+        if (!image) {
+          toast.error("Please choose a product image");
+          setSaving(false);
+          return;
+        }
         await api.post("/products", fd);
         toast.success("Product created");
       }

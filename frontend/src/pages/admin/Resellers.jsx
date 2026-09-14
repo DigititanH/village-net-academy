@@ -2,6 +2,12 @@ import { useState, useEffect, Fragment } from "react";
 import { Check, X as XIcon, Download, FileText, ExternalLink } from "lucide-react";
 import api, { API_BASE } from "../../lib/api";
 import toast from "react-hot-toast";
+import {
+  ACADEMY_RATE,
+  RESELLER_RATE,
+  affiliationBadgeClass,
+  getResellerAffiliation,
+} from "../../lib/resellerAffiliation";
 
 function docHref(url) {
   if (!url) return null;
@@ -57,18 +63,26 @@ export default function AdminResellers() {
 
   return (
     <div>
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
-        <h1 className="text-2xl font-black bg-gradient-to-r from-burnt-400 to-primary-400 bg-clip-text text-transparent">Resellers ({resellers.length})</h1>
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-6">
+        <div>
+          <h1 className="text-2xl font-black bg-gradient-to-r from-burnt-400 to-primary-400 bg-clip-text text-transparent">Resellers ({resellers.length})</h1>
+          <p className="text-sm text-gray-400 mt-1">
+            Resellers earn {RESELLER_RATE}% on product sales. Independent resellers are linked to Digititan Programme; affiliated resellers share {ACADEMY_RATE}% with their centre.
+          </p>
+        </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={() => downloadReport("csv")} className="btn-secondary text-sm inline-flex items-center gap-2 !py-2 !px-4"><Download size={16} /> CSV</button>
           <button type="button" onClick={() => downloadReport("pdf")} className="btn-primary text-sm inline-flex items-center gap-2 !py-2 !px-4"><FileText size={16} /> PDF</button>
         </div>
       </div>
       <div className="card overflow-x-auto">
-        <table className="w-full text-sm min-w-[780px]">
+        <table className="w-full text-sm min-w-[980px]">
           <thead>
             <tr className="text-left text-gray-500 border-b dark:border-gray-700">
               <th className="pb-3">Name</th>
+              <th className="pb-3">Affiliation</th>
+              <th className="pb-3">Centre / Programme</th>
+              <th className="pb-3">Rate</th>
               <th className="pb-3">Email</th>
               <th className="pb-3">Bank</th>
               <th className="pb-3">Docs</th>
@@ -84,6 +98,15 @@ export default function AdminResellers() {
               const hasBank = !!(bank.bank_name || bank.account_number);
               const idHref = docHref(r.id_document_url);
               const proofHref = docHref(r.proof_of_account_url);
+              const aff = r.affiliation
+                ? {
+                    affiliation: r.affiliation,
+                    label: r.affiliation_label,
+                    centreDisplay: r.centre_display,
+                    resellerRate: Number(r.commission_rate ?? r.reseller_rate ?? RESELLER_RATE),
+                    centreRate: Number(r.centre_rate ?? ACADEMY_RATE),
+                  }
+                : getResellerAffiliation(r.academy);
               return (
                 <Fragment key={r.id}>
                   <tr className="border-b dark:border-gray-800">
@@ -91,6 +114,15 @@ export default function AdminResellers() {
                       <button type="button" className="text-left hover:text-burnt-500" onClick={() => setExpanded(expanded === r.id ? null : r.id)}>
                         {r.name}
                       </button>
+                    </td>
+                    <td className="py-3">
+                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${affiliationBadgeClass(aff.affiliation)}`}>
+                        {aff.label || r.affiliation_label}
+                      </span>
+                    </td>
+                    <td className="py-3 text-gray-400 max-w-[160px]">{aff.centreDisplay || r.centre_display || r.academy || "—"}</td>
+                    <td className="py-3 text-xs text-gray-400">
+                      {aff.resellerRate}% / {aff.centreRate}%
                     </td>
                     <td className="py-3 text-gray-500">{r.email}</td>
                     <td className="py-3 text-xs text-gray-400">
@@ -127,9 +159,12 @@ export default function AdminResellers() {
                   </tr>
                   {expanded === r.id && (
                     <tr className="border-b dark:border-gray-800 bg-white/5">
-                      <td colSpan={8} className="py-3 px-3 text-xs text-gray-300">
+                      <td colSpan={11} className="py-3 px-3 text-xs text-gray-300">
                         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                          <p><span className="text-gray-500">Academy:</span> {r.academy || "—"}</p>
+                          <p><span className="text-gray-500">Affiliation:</span> {aff.label}</p>
+                          <p><span className="text-gray-500">Centre / Programme:</span> {aff.centreDisplay || r.academy || "—"}</p>
+                          <p><span className="text-gray-500">Reseller rate:</span> {aff.resellerRate}%</p>
+                          <p><span className="text-gray-500">Centre share:</span> {aff.centreRate}%</p>
                           <p><span className="text-gray-500">Referral:</span> {r.referral_code}</p>
                           <p><span className="text-gray-500">Account holder:</span> {bank.account_name || "—"}</p>
                           <p><span className="text-gray-500">Bank:</span> {bank.bank_name || "—"}</p>

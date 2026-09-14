@@ -126,7 +126,7 @@ CREATE TABLE IF NOT EXISTS reseller_profiles (
   id INT AUTO_INCREMENT PRIMARY KEY,
   user_id INT NOT NULL UNIQUE,
   referral_code VARCHAR(100) NOT NULL UNIQUE,
-  commission_rate DECIMAL(5,2) DEFAULT 56.00,
+  commission_rate DECIMAL(5,2) DEFAULT 53.00,
   status ENUM('pending','approved','rejected','suspended') DEFAULT 'pending',
   wallet_balance DECIMAL(10,2) DEFAULT 0.00,
   total_earned DECIMAL(10,2) DEFAULT 0.00,

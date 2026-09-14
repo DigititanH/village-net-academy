@@ -1,5 +1,15 @@
 [
     {
+        "id": 28,
+        "name": "Digititan Programme",
+        "province": "Gauteng",
+        "city": "",
+        "address": "",
+        "contact": "",
+        "people_trained": 0,
+        "sales_made": 0
+    },
+    {
         "id": 1,
         "name": "Aspire Foundation",
         "province": "KwaZulu-Natal",

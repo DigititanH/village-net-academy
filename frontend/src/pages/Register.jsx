@@ -5,11 +5,14 @@ import AuthTabs from "../components/AuthTabs";
 import { UserPlus } from "lucide-react";
 import toast from "react-hot-toast";
 
+const PROGRAMME_CENTRE = "Digititan Programme";
+
 export default function Register() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("customer");
+  const [affiliation, setAffiliation] = useState("independent"); // independent | affiliated
   const [academy, setAcademy] = useState("");
   const [loading, setLoading] = useState(false);
   const { register } = useAuth();
@@ -17,17 +20,40 @@ export default function Register() {
   const [searchParams] = useSearchParams();
   const redirect = searchParams.get("redirect") || "";
 
-  const isPartner = role === "reseller" || role === "academy";
   const backendRole = role === "customer" ? "customer" : role;
+  const needsCentre =
+    role === "academy" || (role === "reseller" && affiliation === "affiliated");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (password.length < 6) return toast.error("Password must be at least 6 characters");
-    if (isPartner && !academy.trim()) return toast.error("Please enter the name of your academy");
+    if (needsCentre && !academy.trim()) {
+      return toast.error(
+        role === "academy"
+          ? "Please enter your centre name"
+          : "Please enter the centre you are affiliated with"
+      );
+    }
 
     setLoading(true);
     try {
-      const user = await register(name, email, password, backendRole, isPartner ? academy.trim() : undefined);
+      const payloadAcademy =
+        role === "academy"
+          ? academy.trim()
+          : role === "reseller"
+            ? affiliation === "affiliated"
+              ? academy.trim()
+              : PROGRAMME_CENTRE
+            : undefined;
+
+      const user = await register(
+        name,
+        email,
+        password,
+        backendRole,
+        payloadAcademy,
+        role === "reseller" ? affiliation : undefined
+      );
       if (user.pending_verification || user.pending) {
         toast.success(
           user.message ||
@@ -71,16 +97,60 @@ export default function Register() {
             <select
               value={role}
               onChange={(e) => {
-                setRole(e.target.value);
-                if (e.target.value === "customer") setAcademy("");
+                const next = e.target.value;
+                setRole(next);
+                if (next === "customer") {
+                  setAcademy("");
+                  setAffiliation("independent");
+                }
+                if (next === "academy") setAffiliation("affiliated");
               }}
               className="input-field"
             >
               <option value="customer">Individual</option>
-              <option value="reseller">Reseller</option>
-              <option value="academy">Affiliated by the academy</option>
+              <option value="reseller">Reseller (beneficiary)</option>
+              <option value="academy">Centre</option>
             </select>
           </div>
+
+          {role === "reseller" && (
+            <div className="space-y-3">
+              <label className="block text-sm font-semibold text-gray-300">Centre affiliation</label>
+              <label className="flex items-start gap-3 rounded-xl border border-white/10 p-3 cursor-pointer hover:bg-white/5">
+                <input
+                  type="radio"
+                  name="affiliation"
+                  className="mt-1"
+                  checked={affiliation === "independent"}
+                  onChange={() => {
+                    setAffiliation("independent");
+                    setAcademy("");
+                  }}
+                />
+                <span>
+                  <span className="font-semibold block">Independent</span>
+                  <span className="text-xs text-gray-500">
+                    Not linked to a centre — you support the Digititan Programme automatically. You earn 53%; the Programme receives 26%.
+                  </span>
+                </span>
+              </label>
+              <label className="flex items-start gap-3 rounded-xl border border-white/10 p-3 cursor-pointer hover:bg-white/5">
+                <input
+                  type="radio"
+                  name="affiliation"
+                  className="mt-1"
+                  checked={affiliation === "affiliated"}
+                  onChange={() => setAffiliation("affiliated")}
+                />
+                <span>
+                  <span className="font-semibold block">Affiliated with a centre</span>
+                  <span className="text-xs text-gray-500">
+                    Enter your centre name. You earn 53%; the centre receives 26%.
+                  </span>
+                </span>
+              </label>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-semibold mb-1 text-gray-300">Full Name</label>
@@ -103,10 +173,10 @@ export default function Register() {
             />
           </div>
 
-          {isPartner && (
+          {needsCentre && (
             <div>
               <label className="block text-sm font-semibold mb-1 text-gray-300">
-                {role === "academy" ? "Academy you are affiliated with *" : "Academy name *"}
+                {role === "academy" ? "Centre name *" : "Centre name *"}
               </label>
               <input
                 type="text"
@@ -114,14 +184,20 @@ export default function Register() {
                 value={academy}
                 onChange={(e) => setAcademy(e.target.value)}
                 className="input-field"
-                placeholder="e.g. Village NetAcad Academy"
+                placeholder="e.g. Aspire Foundation"
               />
               <p className="text-xs text-gray-500 mt-1">
                 {role === "academy"
-                  ? "Use the exact academy name as registered on the Training Academy map."
-                  : "Enter the academy you sell under"}
+                  ? "Use the exact centre name as registered on the Training Academy map. Centres receive 26% of linked reseller sales."
+                  : "Use the exact centre name as on the Training Academy map."}
               </p>
             </div>
+          )}
+
+          {role === "reseller" && affiliation === "independent" && (
+            <p className="text-xs text-gray-500 rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+              Centre is set automatically to <span className="text-burnt-400 font-semibold">{PROGRAMME_CENTRE}</span>.
+            </p>
           )}
 
           <button type="submit" disabled={loading} className="btn-primary w-full">

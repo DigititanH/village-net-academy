@@ -25,9 +25,23 @@ class AuthController
             Response::error('Email already registered', 409);
         }
 
-        $academyName = trim((string) $academy);
-        if (($userRole === 'reseller' || $userRole === 'academy') && $academyName === '') {
-            Response::error('Academy name is required', 400);
+        $academyName = Commission::normalizeCentreName((string) $academy);
+        $affiliation = strtolower(trim((string) ($body['affiliation'] ?? '')));
+
+        if ($userRole === 'academy' && $academyName === '') {
+            Response::error('Centre name is required when registering as a centre', 400);
+        }
+
+        if ($userRole === 'reseller') {
+            // Independent: auto-support Digititan Programme. Affiliated: centre name required.
+            if ($affiliation === 'affiliated' || ($affiliation === '' && $academyName !== '')) {
+                if ($academyName === '') {
+                    Response::error('Please enter the centre name you are affiliated with', 400);
+                }
+            } else {
+                // independent or omitted affiliation with empty centre
+                $academyName = Commission::PROGRAMME_CENTRE;
+            }
         }
 
         $hash = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
@@ -92,10 +106,14 @@ class AuthController
 
         if ($userRole === 'reseller') {
             $referralCode = 'VNA-' . strtoupper(substr(str_replace('-', '', Request::uuid()), 0, 8));
+            $commissionRate = Commission::RESELLER_RATE;
             Database::queryRun(
                 'INSERT INTO reseller_profiles (user_id, referral_code, academy, commission_rate, status) VALUES (?, ?, ?, ?, ?)',
-                [$userId, $referralCode, $academyName, 56.00, 'approved']
+                [$userId, $referralCode, $academyName, $commissionRate, 'approved']
             );
+            $affiliationLabel = Commission::isProgrammeCentre($academyName)
+                ? 'Independent (Digititan Programme)'
+                : 'Affiliated centre';
             try {
                 Mailer::send([
                     'to' => Site::email(),
@@ -103,7 +121,10 @@ class AuthController
                     'subject' => "New reseller registration: $name",
                     'html' => "<p><strong>Name:</strong> " . htmlspecialchars($name) . "</p>
                     <p><strong>Email:</strong> " . htmlspecialchars($email) . "</p>
-                    <p><strong>Academy:</strong> " . htmlspecialchars($academyName) . "</p>
+                    <p><strong>Affiliation:</strong> " . htmlspecialchars($affiliationLabel) . "</p>
+                    <p><strong>Centre:</strong> " . htmlspecialchars($academyName) . "</p>
+                    <p><strong>Reseller commission:</strong> " . number_format($commissionRate, 0) . "%</p>
+                    <p><strong>Centre share:</strong> " . number_format(Commission::ACADEMY_RATE, 0) . "%</p>
                     <p><strong>Referral code:</strong> $referralCode</p>",
                 ]);
             } catch (Throwable $e) {
@@ -119,7 +140,8 @@ class AuthController
                     'subject' => "New academy affiliate registration: $name",
                     'html' => "<p><strong>Name:</strong> " . htmlspecialchars($name) . "</p>
                     <p><strong>Email:</strong> " . htmlspecialchars($email) . "</p>
-                    <p><strong>Academy:</strong> " . htmlspecialchars($academyName) . "</p>",
+                    <p><strong>Academy:</strong> " . htmlspecialchars($academyName) . "</p>
+                    <p><strong>Centre share of linked reseller sales:</strong> " . number_format(Commission::ACADEMY_RATE, 0) . "%</p>",
                 ]);
             } catch (Throwable $e) {
                 error_log('[register] academy notify mail: ' . $e->getMessage());

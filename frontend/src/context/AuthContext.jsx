@@ -32,8 +32,15 @@ export function AuthProvider({ children }) {
     return res.data.user;
   };
 
-  const register = async (name, email, password, role, academy) => {
-    const res = await api.post("/auth/register", { name, email, password, role, academy });
+  const register = async (name, email, password, role, academy, affiliation) => {
+    const res = await api.post("/auth/register", {
+      name,
+      email,
+      password,
+      role,
+      academy,
+      affiliation,
+    });
     if (res.data.pending || res.data.pending_verification) {
       return {
         ...(res.data.user || {}),

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Check, X, Trash2, Search } from "lucide-react";
 import api from "../../lib/api";
 import toast from "react-hot-toast";
+import { affiliationBadgeClass, getResellerAffiliation } from "../../lib/resellerAffiliation";
 
 const approvalColors = {
   pending: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
@@ -56,13 +57,18 @@ export default function AdminUsers() {
               <th className="pb-3">Name</th>
               <th className="pb-3">Email</th>
               <th className="pb-3">Role</th>
+              <th className="pb-3">Centre / Affiliation</th>
               <th className="pb-3">Status</th>
               <th className="pb-3">Joined</th>
               <th className="pb-3">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {users.map((u) => (
+            {users.map((u) => {
+              const resellerAff = u.role === "reseller" && u.reseller_centre
+                ? getResellerAffiliation(u.reseller_centre)
+                : null;
+              return (
               <tr key={u.id} className="border-b dark:border-gray-800">
                 <td className="py-3 font-medium">{u.name}</td>
                 <td className="py-3 text-gray-500">{u.email}</td>
@@ -70,9 +76,27 @@ export default function AdminUsers() {
                   <select value={u.role} onChange={(e) => changeRole(u.id, e.target.value)} className="select-field-sm">
                     <option value="customer">Customer</option>
                     <option value="reseller">Reseller</option>
+                    <option value="academy">Centre</option>
                     <option value="admin">Admin</option>
                     <option value="super_admin">Super Admin</option>
                   </select>
+                </td>
+                <td className="py-3 text-xs text-gray-400">
+                  {u.role === "academy" && u.academy_name ? (
+                    <span>{u.academy_name}</span>
+                  ) : resellerAff ? (
+                    <div className="space-y-1">
+                      <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${affiliationBadgeClass(resellerAff.affiliation)}`}>
+                        {resellerAff.label}
+                      </span>
+                      <p>{resellerAff.centreDisplay}</p>
+                      {u.reseller_commission_rate != null && (
+                        <p className="text-gray-500">{Number(u.reseller_commission_rate)}% rate</p>
+                      )}
+                    </div>
+                  ) : (
+                    "—"
+                  )}
                 </td>
                 <td className="py-3">
                   <span className={`text-xs font-medium px-2.5 py-1 rounded-full capitalize ${approvalColors[u.is_approved] || approvalColors.pending}`}>
@@ -98,7 +122,8 @@ export default function AdminUsers() {
                   </div>
                 </td>
               </tr>
-            ))}
+            );
+            })}
           </tbody>
         </table>
       </div>

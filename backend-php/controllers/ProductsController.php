@@ -160,6 +160,7 @@ class ProductsController
 
     public static function categories(): void
     {
+        SchemaEnsure::products();
         Response::json(Database::queryAll('SELECT * FROM categories ORDER BY name'));
     }
 
@@ -178,10 +179,12 @@ class ProductsController
 
     public static function create(): void
     {
-        Auth::authorize('admin');
+        Auth::authorizeAdmin();
+        SchemaEnsure::products();
+
         $body = array_merge(Request::jsonBody(), $_POST);
-        $name = $body['name'] ?? '';
-        if (!$name) {
+        $name = trim((string) ($body['name'] ?? ''));
+        if ($name === '') {
             Response::error('Name is required', 400);
         }
 
@@ -200,32 +203,47 @@ class ProductsController
         }
 
         $imageUrl = Request::handleUpload($_FILES['image'] ?? null);
+        if (!$imageUrl) {
+            Response::error('Please choose a product image (JPG, PNG, GIF, or WebP)', 400);
+        }
         $slug = Request::slugify($name) . '-' . time();
 
-        $result = Database::queryRun(
-            'INSERT INTO products (name, slug, description, price, compare_price, category_id, subcategory, image, stock, sizes, colors)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [
-                $name,
-                $slug,
-                self::nullableString($body['description'] ?? null),
-                $body['price'] ?? 0,
-                self::nullableDecimal($body['compare_price'] ?? null),
-                $categoryId,
-                $subcategory,
-                $imageUrl,
-                isset($body['stock']) && $body['stock'] !== '' ? (int) $body['stock'] : 0,
-                $categorySlug === 'merchandise' ? self::nullableString($body['sizes'] ?? null) : null,
-                self::nullableString($body['colors'] ?? null),
-            ]
-        );
+        try {
+            $result = Database::queryRun(
+                'INSERT INTO products (name, slug, description, price, compare_price, category_id, subcategory, image, stock, sizes, colors)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [
+                    $name,
+                    $slug,
+                    self::nullableString($body['description'] ?? null),
+                    $body['price'] ?? 0,
+                    self::nullableDecimal($body['compare_price'] ?? null),
+                    $categoryId,
+                    $subcategory,
+                    $imageUrl,
+                    isset($body['stock']) && $body['stock'] !== '' ? (int) $body['stock'] : 0,
+                    $categorySlug === 'merchandise' ? self::nullableString($body['sizes'] ?? null) : null,
+                    self::nullableString($body['colors'] ?? null),
+                ]
+            );
+        } catch (Throwable $e) {
+            SchemaEnsure::products();
+            if (stripos($e->getMessage(), 'Unknown column') !== false || stripos($e->getMessage(), '42S22') !== false) {
+                Response::error(
+                    'Database schema is out of date. Import backend-php/database/UPGRADE-LIVE-VIA-PHPMYADMIN.sql in phpMyAdmin, then try again.',
+                    500
+                );
+            }
+            throw $e;
+        }
 
-        Response::json(['id' => $result['lastInsertRowid'], 'message' => 'Product created'], 201);
+        Response::json(['id' => $result['lastInsertRowid'], 'message' => 'Product created', 'image' => $imageUrl], 201);
     }
 
     public static function update(array $params): void
     {
         Auth::authorizeAdmin();
+        SchemaEnsure::products();
         $json = [];
         try {
             $json = Request::jsonBody();

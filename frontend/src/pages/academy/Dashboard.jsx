@@ -35,10 +35,10 @@ export default function AcademyDashboard() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-black bg-gradient-to-r from-burnt-400 to-primary-400 bg-clip-text text-transparent">
-          Academy Dashboard
+          Centre Dashboard
         </h1>
         <p className="text-sm text-gray-400 mt-1">
-          Affiliated with <span className="text-burnt-300 font-semibold">{data.academy_name}</span>
+          Centre: <span className="text-burnt-300 font-semibold">{data.academy_name}</span> — you receive 26% of linked reseller sales.
         </p>
       </div>
 

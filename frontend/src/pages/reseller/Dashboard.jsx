@@ -64,6 +64,14 @@ export default function ResellerDashboard() {
         </div>
       </div>
 
+      {profile.academy && (
+        <p className="text-sm text-gray-400">
+          {String(profile.academy).toLowerCase().includes("digititan") || String(profile.academy).toLowerCase().includes("programme")
+            ? <>Supporting <span className="text-gray-200 font-semibold">Digititan Programme</span> (independent — Programme receives 26%)</>
+            : <>Affiliated with <span className="text-gray-200 font-semibold">{profile.academy}</span> (centre receives 26%)</>}
+        </p>
+      )}
+
       {profile.status === "approved" && (
         <div className="card flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-gray-400">Withdraw from R100 by entering your banking details.</p>
@@ -83,10 +91,10 @@ export default function ResellerDashboard() {
       </div>
 
       <div className="card overflow-x-auto">
-        <h3 className="font-semibold mb-4">Recent Commissions (56% of each sale)</h3>
+        <h3 className="font-semibold mb-4">Recent Commissions ({Number(profile.commission_rate)}% of each sale)</h3>
         {!commissions.length ? <p className="text-gray-500 text-sm">No commissions yet. Share your referral code to start earning!</p> : (
           <table className="w-full text-sm min-w-[520px]">
-            <thead><tr className="text-left text-gray-500 border-b dark:border-gray-700"><th className="pb-3">Order</th><th className="pb-3">Order Total</th><th className="pb-3">Your 56% Commission</th><th className="pb-3">Status</th><th className="pb-3">Date</th></tr></thead>
+            <thead><tr className="text-left text-gray-500 border-b dark:border-gray-700"><th className="pb-3">Order</th><th className="pb-3">Order Total</th><th className="pb-3">Your {Number(profile.commission_rate)}% Commission</th><th className="pb-3">Status</th><th className="pb-3">Date</th></tr></thead>
             <tbody>
               {commissions.map((c) => (
                 <tr key={c.id} className="border-b dark:border-gray-800">

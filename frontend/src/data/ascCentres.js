@@ -13,6 +13,7 @@ export const SA_PROVINCES = [
 ];
 
 export const ascCentres = [
+  { id: 28, name: "Digititan Programme", province: "Gauteng" },
   { id: 1, name: "Aspire Foundation", province: "KwaZulu-Natal" },
   { id: 2, name: "Towards Uniting the Church", province: "KwaZulu-Natal" },
   { id: 3, name: "Bambiqhaza Consulting and Community Development", province: "KwaZulu-Natal" },

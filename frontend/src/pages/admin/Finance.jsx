@@ -2,8 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { Building2, Check, DollarSign, Wallet, X as XIcon, Download, FileText } from "lucide-react";
 import api, { API_BASE } from "../../lib/api";
 import toast from "react-hot-toast";
-
-const ACADEMY_RATE = 26;
+import {
+  ACADEMY_RATE,
+  RESELLER_RATE,
+  affiliationBadgeClass,
+  getResellerAffiliation,
+} from "../../lib/resellerAffiliation";
 
 function parseBank(raw) {
   try {
@@ -105,7 +109,8 @@ export default function AdminFinance() {
             Finance
           </h1>
           <p className="text-sm text-gray-400 mt-1">
-            Track reseller earnings, academy payouts ({ACADEMY_RATE}% of linked sales), and withdrawal requests (minimum R100).
+            Track reseller earnings ({RESELLER_RATE}%), centre payouts ({ACADEMY_RATE}% of linked sales), and withdrawal requests (minimum R100).
+            Independent resellers are linked to Digititan Programme automatically.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -133,7 +138,7 @@ export default function AdminFinance() {
             <Building2 size={22} className="text-sky-400" />
           </div>
           <div>
-            <p className="text-sm text-gray-500">Academy Payouts Due ({ACADEMY_RATE}%)</p>
+            <p className="text-sm text-gray-500">Centre / Programme Payouts Due ({ACADEMY_RATE}%)</p>
             <p className="text-xl font-bold text-sky-400">R{totals.academyDue.toFixed(2)}</p>
           </div>
         </div>
@@ -158,21 +163,21 @@ export default function AdminFinance() {
       </div>
 
       <div className="card overflow-x-auto">
-        <h2 className="font-semibold text-lg mb-1">Academy Earnings</h2>
+        <h2 className="font-semibold text-lg mb-1">Centre / Programme earnings</h2>
         <p className="text-xs text-gray-500 mb-4">
-          Each academy receives {ACADEMY_RATE}% of sales made by resellers linked to that academy.
+          Each centre (or Digititan Programme for independent resellers) receives {ACADEMY_RATE}% of sales made by linked resellers. Resellers earn {RESELLER_RATE}%.
         </p>
         {!academies.length ? (
-          <p className="text-sm text-gray-500">No academies linked to resellers yet.</p>
+          <p className="text-sm text-gray-500">No centres linked to resellers yet.</p>
         ) : (
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-gray-500 border-b border-white/10">
-                <th className="pb-3">Academy</th>
+                <th className="pb-3">Centre / Programme</th>
                 <th className="pb-3">Resellers</th>
                 <th className="pb-3">Sales Total</th>
                 <th className="pb-3">Reseller Commission</th>
-                <th className="pb-3">Academy Should Receive ({ACADEMY_RATE}%)</th>
+                <th className="pb-3">Centre Should Receive ({ACADEMY_RATE}%)</th>
               </tr>
             </thead>
             <tbody>
@@ -201,7 +206,8 @@ export default function AdminFinance() {
             <thead>
               <tr className="text-left text-gray-500 border-b border-white/10">
                 <th className="pb-3">Reseller</th>
-                <th className="pb-3">Academy</th>
+                <th className="pb-3">Affiliation</th>
+                <th className="pb-3">Centre / Programme</th>
                 <th className="pb-3">Email</th>
                 <th className="pb-3">Rate</th>
                 <th className="pb-3">Total Earned</th>
@@ -213,12 +219,25 @@ export default function AdminFinance() {
             <tbody>
               {resellers.map((r) => {
                 const requested = requestedByReseller[r.id] || 0;
+                const aff = r.affiliation
+                  ? {
+                      affiliation: r.affiliation,
+                      label: r.affiliation_label,
+                      centreDisplay: r.centre_display,
+                      resellerRate: Number(r.commission_rate ?? r.reseller_rate ?? RESELLER_RATE),
+                    }
+                  : getResellerAffiliation(r.academy);
                 return (
                   <tr key={r.id} className="border-b border-white/5">
                     <td className="py-3 font-medium">{r.name}</td>
-                    <td className="py-3 text-gray-400 max-w-[160px]">{r.academy || "—"}</td>
+                    <td className="py-3">
+                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${affiliationBadgeClass(aff.affiliation)}`}>
+                        {aff.label}
+                      </span>
+                    </td>
+                    <td className="py-3 text-gray-400 max-w-[160px]">{aff.centreDisplay || r.academy || "—"}</td>
                     <td className="py-3 text-gray-500">{r.email}</td>
-                    <td className="py-3">{Number(r.commission_rate)}%</td>
+                    <td className="py-3">{aff.resellerRate}%</td>
                     <td className="py-3 text-green-500 font-semibold">R{Number(r.total_earned || 0).toFixed(2)}</td>
                     <td className="py-3">R{Number(r.wallet_balance || 0).toFixed(2)}</td>
                     <td className={`py-3 font-semibold ${requested > 0 ? "text-yellow-400" : "text-gray-500"}`}>

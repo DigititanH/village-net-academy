@@ -6,21 +6,49 @@ export const API_BASE = apiOrigin ? `${apiOrigin}/api` : "/api";
 
 const api = axios.create({
   baseURL: API_BASE,
-  headers: { "Content-Type": "application/json" },
 });
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  // Let the browser set multipart boundary — required for file/product form uploads
-  if (typeof FormData !== "undefined" && config.data instanceof FormData) {
-    if (config.headers && typeof config.headers.delete === "function") {
+  if (!config.headers) config.headers = {};
+
+  if (token) {
+    if (typeof config.headers.set === "function") {
+      config.headers.set("Authorization", `Bearer ${token}`);
+    } else {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+  }
+
+  const isFormData = typeof FormData !== "undefined" && config.data instanceof FormData;
+
+  // Never force application/json on FormData — breaks product image uploads (missing multipart boundary).
+  if (isFormData) {
+    if (typeof config.headers.delete === "function") {
       config.headers.delete("Content-Type");
-    } else if (config.headers) {
+      config.headers.delete("content-type");
+    }
+    if (typeof config.headers.set === "function") {
+      // Axios: false omits the header so the browser sets multipart boundary
+      config.headers.set("Content-Type", false);
+    } else {
       delete config.headers["Content-Type"];
       delete config.headers["content-type"];
     }
+  } else if (config.data != null && typeof config.data === "object") {
+    const hasType =
+      (typeof config.headers.get === "function" && config.headers.get("Content-Type")) ||
+      config.headers["Content-Type"] ||
+      config.headers["content-type"];
+    if (!hasType) {
+      if (typeof config.headers.set === "function") {
+        config.headers.set("Content-Type", "application/json");
+      } else {
+        config.headers["Content-Type"] = "application/json";
+      }
+    }
   }
+
   return config;
 });
 

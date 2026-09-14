@@ -2,8 +2,8 @@
 
 class ResellersController
 {
-    /** Academy share of referred sales (percent of order total). */
-    public const ACADEMY_COMMISSION_RATE = 26.00;
+    /** Centre / academy share of referred sales (percent of order total). */
+    public const ACADEMY_COMMISSION_RATE = Commission::ACADEMY_RATE;
 
     private static function requireApprovedReseller(): void
     {
@@ -248,6 +248,7 @@ class ResellersController
         );
         foreach ($rows as &$row) {
             $row['bank'] = self::decodeBank($row['bank_details'] ?? null);
+            $row = array_merge($row, Commission::resellerAffiliationInfo($row['academy'] ?? null));
         }
         unset($row);
         Response::json($rows);

@@ -1,10 +1,10 @@
 -- Incremental changes for existing databases. Safe to re-run (errors ignored by migrate.php).
 
--- Resellers earn 56% commission on referred shop orders
-ALTER TABLE reseller_profiles MODIFY commission_rate DECIMAL(5,2) DEFAULT 56.00;
-UPDATE reseller_profiles SET commission_rate = 56.00;
+-- Resellers earn 53% commission; linked centres earn 26% of referred sales
+ALTER TABLE reseller_profiles MODIFY commission_rate DECIMAL(5,2) DEFAULT 53.00;
+-- Do not bulk-update existing rates — only change the default for new rows.
 
--- Academies receive 26% of sales made by resellers linked to that academy (computed in admin Finance).
+-- Academies / centres receive 26% of sales made by resellers linked to that centre (computed in admin Finance).
 
 -- Super admin role for elevated CMS / admin access
 ALTER TABLE registrations MODIFY role ENUM('admin','super_admin','reseller','customer') DEFAULT 'customer';
