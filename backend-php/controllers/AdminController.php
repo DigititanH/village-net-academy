@@ -113,13 +113,33 @@ class AdminController
         }
         Database::queryRun('UPDATE registrations SET is_approved = ? WHERE id = ?', [$status, $params['id']]);
 
-        $user = Database::queryGet('SELECT role FROM registrations WHERE id = ?', [$params['id']]);
-        if ($user && $user['role'] === 'reseller') {
+        $user = Database::queryGet(
+            'SELECT r.role, r.name, r.is_verified, l.email
+             FROM registrations r
+             JOIN logins l ON l.registration_id = r.id
+             WHERE r.id = ?',
+            [$params['id']]
+        );
+        if ($user && ($user['role'] ?? '') === 'reseller') {
             $profileStatus = $status === 'approved' ? 'approved' : 'rejected';
             Database::queryRun('UPDATE reseller_profiles SET status = ? WHERE user_id = ?', [$profileStatus, $params['id']]);
         }
 
-        Response::json(['message' => "User $status"]);
+        // After approve, push a confirmation email if still unverified (mobile
+        // reseller register previously returned before sending one).
+        $emailSent = null;
+        if ($status === 'approved' && $user && empty($user['is_verified']) && !empty($user['email'])) {
+            $emailSent = AuthController::issueVerificationEmail(
+                (int) $params['id'],
+                (string) $user['email'],
+                (string) ($user['name'] ?? '')
+            );
+        }
+
+        Response::json([
+            'message' => "User $status",
+            'email_sent' => $emailSent,
+        ]);
     }
 
     public static function userDelete(array $params): void

@@ -178,10 +178,24 @@ class AuthController
                 error_log('[register] reseller notify mail: ' . $e->getMessage());
             }
 
+            // Must send confirmation before the pending early-return — otherwise
+            // the account is created unverified and never gets a verify email
+            // until the website "resend" path is used.
+            $emailSent = false;
+            if ($verificationToken) {
+                $emailSent = self::sendVerificationEmail($email, $name, $verificationToken);
+                if (!$emailSent) {
+                    error_log('[register] reseller verify mail failed: ' . (Mailer::$lastError ?? 'unknown'));
+                }
+            }
+
             // App shows the pending screen when JWT is not issued yet.
             Response::json([
                 'pending' => true,
-                'message' => 'Reseller account created. An admin must approve it before you can sign in.',
+                'email_sent' => $emailSent,
+                'message' => $emailSent
+                    ? 'Reseller account created. Confirm your email, then wait for Digititan / Ops to approve before you can sign in.'
+                    : 'Reseller account created. An admin must approve it before you can sign in. Confirmation email could not be sent — use Resend on the sign-in screen after approval.',
                 'user' => [
                     'id' => (int) $userId,
                     'name' => $name,
@@ -504,20 +518,11 @@ class AuthController
         $emailSent = false;
 
         if ($user && empty($user['is_verified'])) {
-            $token = Request::uuid();
-            $expires = date('Y-m-d H:i:s', time() + 86400);
-            try {
-                Database::queryRun(
-                    'UPDATE registrations SET verification_token = ?, verification_token_expires = ? WHERE id = ?',
-                    [$token, $expires, $user['id']]
-                );
-            } catch (Throwable $e) {
-                Database::queryRun(
-                    'UPDATE registrations SET verification_token = ? WHERE id = ?',
-                    [$token, $user['id']]
-                );
-            }
-            $emailSent = self::sendVerificationEmail($email, (string) $user['name'], $token);
+            $emailSent = self::issueVerificationEmail(
+                (int) $user['id'],
+                $email,
+                (string) $user['name']
+            );
             if (!$emailSent) {
                 error_log('[resendVerification] mail failed: ' . (Mailer::$lastError ?? 'unknown'));
             }
@@ -527,6 +532,28 @@ class AuthController
             'message' => 'If that account needs confirmation, a new link was sent. Check your inbox and spam folder.',
             'email_sent' => $user && empty($user['is_verified']) ? $emailSent : null,
         ]);
+    }
+
+    /** Refresh token + send confirmation email. Used by resend + admin approve. */
+    public static function issueVerificationEmail(int $userId, string $email, string $name): bool
+    {
+        if ($userId < 1 || $email === '') {
+            return false;
+        }
+        $token = Request::uuid();
+        $expires = date('Y-m-d H:i:s', time() + 86400);
+        try {
+            Database::queryRun(
+                'UPDATE registrations SET verification_token = ?, verification_token_expires = ? WHERE id = ?',
+                [$token, $expires, $userId]
+            );
+        } catch (Throwable $e) {
+            Database::queryRun(
+                'UPDATE registrations SET verification_token = ? WHERE id = ?',
+                [$token, $userId]
+            );
+        }
+        return self::sendVerificationEmail($email, $name, $token);
     }
 
     private static function sendVerificationEmail(string $email, string $name, string $verificationToken): bool
