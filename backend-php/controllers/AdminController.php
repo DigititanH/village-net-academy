@@ -413,4 +413,155 @@ class AdminController
 
         Response::textReport('resellers-banking-report.txt', implode("\n", $lines));
     }
+
+    public static function team(): void
+    {
+        Auth::authorize('admin');
+        SchemaEnsure::registrations();
+        try {
+            $rows = Database::queryAll(
+                "SELECT r.id, r.name, l.email, r.role, COALESCE(r.is_active, 1) AS is_active
+                 FROM registrations r
+                 JOIN logins l ON l.registration_id = r.id
+                 WHERE r.role IN ('admin', 'super_admin', 'finance', 'finance_admin')
+                 ORDER BY r.name"
+            );
+        } catch (Throwable $e) {
+            $rows = Database::queryAll(
+                "SELECT r.id, r.name, l.email, r.role, 1 AS is_active
+                 FROM registrations r
+                 JOIN logins l ON l.registration_id = r.id
+                 WHERE r.role IN ('admin', 'super_admin')
+                 ORDER BY r.name"
+            );
+        }
+        Response::json(['admins' => $rows]);
+    }
+
+    public static function addAdmin(): void
+    {
+        Auth::authorize('admin');
+        SchemaEnsure::registrations();
+        SchemaEnsure::logins();
+        $body = Request::jsonBody();
+        $email = strtolower(trim((string) ($body['email'] ?? '')));
+        $name = trim((string) ($body['name'] ?? ''));
+        $kind = strtolower(trim((string) ($body['role'] ?? $body['kind'] ?? 'admin')));
+        $isFinance = in_array($kind, ['finance', 'finance_admin', 'financeadmin'], true);
+        $dbRole = $isFinance ? 'finance' : 'admin';
+        if ($email === '' || !str_contains($email, '@')) {
+            Response::error('A valid email is required', 400);
+        }
+        if ($name === '') {
+            $name = ucwords(str_replace(['.', '_', '-'], ' ', explode('@', $email)[0]));
+        }
+
+        $login = Database::queryGet(
+            'SELECT registration_id FROM logins WHERE email = ?',
+            [$email]
+        );
+
+        if ($login) {
+            $userId = (int) $login['registration_id'];
+            try {
+                Database::queryRun(
+                    "UPDATE registrations SET role = ?, is_approved = 'approved', is_verified = 1 WHERE id = ?",
+                    [$dbRole, $userId]
+                );
+            } catch (Throwable $e) {
+                Response::error(
+                    'Could not set staff role. Ask Ops to allow finance/admin roles on registrations.role.',
+                    500
+                );
+            }
+            try {
+                Database::queryRun('UPDATE registrations SET is_active = 1 WHERE id = ?', [$userId]);
+            } catch (Throwable $e) {
+                // is_active optional
+            }
+        } else {
+            try {
+                $result = Database::queryRun(
+                    "INSERT INTO registrations (name, role, is_verified, is_approved, verification_token) VALUES (?, ?, 1, 'approved', NULL)",
+                    [$name, $dbRole]
+                );
+            } catch (Throwable $e) {
+                try {
+                    $result = Database::queryRun(
+                        "INSERT INTO registrations (name, role, is_verified, is_approved) VALUES (?, ?, 1, 'approved')",
+                        [$name, $dbRole]
+                    );
+                } catch (Throwable $e2) {
+                    Response::error(
+                        'Could not create staff account. Role enum may need finance/admin values.',
+                        500
+                    );
+                }
+            }
+            $userId = (int) $result['lastInsertRowid'];
+            if ($userId < 1) {
+                Response::error('Could not create admin account', 500);
+            }
+            $placeholder = password_hash(AccountSecurity::tempPassword(), PASSWORD_BCRYPT, ['cost' => 12]);
+            Database::queryRun(
+                'INSERT INTO logins (registration_id, email, password) VALUES (?, ?, ?)',
+                [$userId, $email, $placeholder]
+            );
+            try {
+                Database::queryRun('UPDATE registrations SET is_active = 1 WHERE id = ?', [$userId]);
+            } catch (Throwable $e) {
+                // is_active optional
+            }
+        }
+
+        $plain = AccountSecurity::tempPassword();
+        $expires = AccountSecurity::setTempPassword($userId, $plain);
+        AccountSecurity::staffInvited($name, $email, $plain, $expires, $isFinance ? 'finance' : 'admin');
+
+        Response::json([
+            'message' => $isFinance
+                ? 'Finance admin invited. They have 72 hours to sign in with the temporary password emailed to them.'
+                : 'Admin invited. They have 72 hours to sign in with the temporary password emailed to them.',
+        ]);
+    }
+
+    public static function userActive(array $params): void
+    {
+        Auth::authorize('admin');
+        SchemaEnsure::registrations();
+        $body = Request::jsonBody();
+        $active = !empty($body['active']) || $body['active'] === true || $body['active'] === 1 || $body['active'] === '1';
+        $id = (int) $params['id'];
+        if ($id === (int) Auth::$user['id']) {
+            Response::error('You cannot deactivate yourself', 400);
+        }
+        try {
+            Database::queryRun(
+                'UPDATE registrations SET is_active = ? WHERE id = ?',
+                [$active ? 1 : 0, $id]
+            );
+        } catch (Throwable $e) {
+            Response::error('is_active column missing — run admin invite SQL / SchemaEnsure', 500);
+        }
+        Response::json(['message' => $active ? 'User reactivated' : 'User deactivated']);
+    }
+
+    public static function userPassword(array $params): void
+    {
+        Auth::authorize('admin');
+        SchemaEnsure::logins();
+        $id = (int) $params['id'];
+        $row = Database::queryGet(
+            'SELECT r.name, l.email FROM registrations r
+             JOIN logins l ON l.registration_id = r.id WHERE r.id = ?',
+            [$id]
+        );
+        if (!$row || empty($row['email'])) {
+            Response::error('User not found', 404);
+        }
+        $plain = AccountSecurity::tempPassword();
+        $expires = AccountSecurity::setTempPassword($id, $plain);
+        AccountSecurity::passwordResetByAdmin((string) $row['name'], (string) $row['email'], $plain, $expires);
+        Response::json(['message' => 'Temporary password emailed. Valid for 72 hours.']);
+    }
 }

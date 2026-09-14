@@ -42,6 +42,18 @@ class SchemaEnsure
             if (!self::columnExists($pdo, 'registrations', 'signup_client')) {
                 $pdo->exec("ALTER TABLE registrations ADD COLUMN signup_client VARCHAR(20) DEFAULT NULL");
             }
+
+            if (!self::columnExists($pdo, 'registrations', 'is_active')) {
+                $pdo->exec('ALTER TABLE registrations ADD COLUMN is_active TINYINT(1) NOT NULL DEFAULT 1');
+            }
+
+            try {
+                $pdo->exec(
+                    "ALTER TABLE registrations MODIFY role ENUM('admin','super_admin','reseller','customer','academy','finance','finance_admin','ops_admin') DEFAULT 'customer'"
+                );
+            } catch (Throwable $e) {
+                // ignore if already correct / unsupported
+            }
         } catch (Throwable $e) {
             error_log('[SchemaEnsure] registrations: ' . $e->getMessage());
         }

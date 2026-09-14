@@ -138,6 +138,10 @@ class Router
         self::put('/api/admin/users/{id}/role', fn ($p) => AdminController::userRole($p));
         self::put('/api/admin/users/{id}/approve', fn ($p) => AdminController::userApprove($p));
         self::delete('/api/admin/users/{id}', fn ($p) => AdminController::userDelete($p));
+        self::get('/api/admin/team', [AdminController::class, 'team']);
+        self::post('/api/admin/team', [AdminController::class, 'addAdmin']);
+        self::put('/api/admin/users/{id}/active', fn ($p) => AdminController::userActive($p));
+        self::put('/api/admin/users/{id}/password', fn ($p) => AdminController::userPassword($p));
         self::get('/api/admin/contacts', [AdminController::class, 'contacts']);
         self::post('/api/admin/notifications', [AdminController::class, 'sendNotification']);
         self::post('/api/admin/categories', [AdminController::class, 'createCategory']);
