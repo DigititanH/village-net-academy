@@ -152,13 +152,15 @@ class OrdersController
     public static function myOrders(): void
     {
         Auth::authenticate();
+        SchemaEnsure::orderReturns();
         $orders = Database::queryAll(
             'SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC',
             [Auth::$user['id']]
         );
         foreach ($orders as &$order) {
-            $order['items'] = Database::queryAll('SELECT * FROM order_items WHERE order_id = ?', [$order['id']]);
+            $order = OrderAfterDelivery::withItems($order);
         }
+        unset($order);
         Response::json($orders);
     }
 
@@ -190,6 +192,7 @@ class OrdersController
     public static function show(array $params): void
     {
         Auth::authenticate();
+        SchemaEnsure::orderReturns();
         $order = Database::queryGet('SELECT * FROM orders WHERE id = ?', [$params['id']]);
         if (!$order) {
             Response::error('Order not found', 404);
@@ -197,32 +200,12 @@ class OrdersController
         if (Auth::$user['role'] !== 'admin' && (int) $order['user_id'] !== (int) Auth::$user['id']) {
             Response::error('Access denied', 403);
         }
-        $order['items'] = Database::queryAll('SELECT * FROM order_items WHERE order_id = ?', [$order['id']]);
-        Response::json($order);
+        Response::json(OrderAfterDelivery::withItems($order));
     }
 
     public static function update(array $params): void
     {
         Auth::authorize('admin');
-        $body = Request::jsonBody();
-        $fields = [];
-        $sqlParams = [];
-
-        if (!empty($body['status'])) {
-            $fields[] = 'status = ?';
-            $sqlParams[] = $body['status'];
-        }
-        if (!empty($body['tracking_number'])) {
-            $fields[] = 'tracking_number = ?';
-            $sqlParams[] = $body['tracking_number'];
-        }
-
-        if (!$fields) {
-            Response::error('Nothing to update', 400);
-        }
-
-        $sqlParams[] = $params['id'];
-        Database::queryRun('UPDATE orders SET ' . implode(', ', $fields) . ' WHERE id = ?', $sqlParams);
-        Response::json(['message' => 'Order updated']);
+        OrderAfterDelivery::adminUpdate((int) $params['id'], Request::jsonBody());
     }
 }

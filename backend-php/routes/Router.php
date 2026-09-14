@@ -63,6 +63,8 @@ class Router
         self::post('/api/orders', [OrdersController::class, 'create']);
         self::get('/api/orders/my-orders', [OrdersController::class, 'myOrders']);
         self::get('/api/orders/admin/all', [OrdersController::class, 'adminAll']);
+        self::get('/api/orders/{id}/return', fn ($p) => ReturnsController::meta($p));
+        self::post('/api/orders/{id}/return', fn ($p) => ReturnsController::create($p));
         self::get('/api/orders/{id}', fn ($p) => OrdersController::show($p));
         self::put('/api/orders/{id}', fn ($p) => OrdersController::update($p));
 
@@ -142,6 +144,8 @@ class Router
         self::post('/api/admin/team', [AdminController::class, 'addAdmin']);
         self::put('/api/admin/users/{id}/active', fn ($p) => AdminController::userActive($p));
         self::put('/api/admin/users/{id}/password', fn ($p) => AdminController::userPassword($p));
+        self::get('/api/admin/returns', [ReturnsController::class, 'adminAll']);
+        self::put('/api/admin/returns/{id}', fn ($p) => ReturnsController::adminUpdate($p));
         self::get('/api/admin/contacts', [AdminController::class, 'contacts']);
         self::post('/api/admin/notifications', [AdminController::class, 'sendNotification']);
         self::post('/api/admin/categories', [AdminController::class, 'createCategory']);

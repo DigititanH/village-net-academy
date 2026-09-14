@@ -212,6 +212,41 @@ class SchemaEnsure
         }
     }
 
+    /** delivered_at + order_returns for 7-day returns / review gating. */
+    public static function orderReturns(): void
+    {
+        static $done = false;
+        if ($done) {
+            return;
+        }
+        $done = true;
+
+        try {
+            $pdo = Database::connection();
+            if (!self::columnExists($pdo, 'orders', 'delivered_at')) {
+                $pdo->exec('ALTER TABLE orders ADD COLUMN delivered_at DATETIME NULL');
+            }
+            $pdo->exec(
+                "CREATE TABLE IF NOT EXISTS order_returns (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    order_id INT NOT NULL,
+                    user_id INT NOT NULL,
+                    reason TEXT NOT NULL,
+                    status ENUM('requested','approved','rejected','completed') DEFAULT 'requested',
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY uniq_order_return (order_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+            );
+            $pdo->exec(
+                "UPDATE orders
+                 SET delivered_at = COALESCE(updated_at, created_at)
+                 WHERE status = 'delivered' AND delivered_at IS NULL"
+            );
+        } catch (Throwable $e) {
+            error_log('[SchemaEnsure] orderReturns: ' . $e->getMessage());
+        }
+    }
+
     private static function columnExists(PDO $pdo, string $table, string $column): bool
     {
         $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
