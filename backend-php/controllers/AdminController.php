@@ -106,6 +106,7 @@ class AdminController
     public static function userApprove(array $params): void
     {
         Auth::authorize('admin');
+        SchemaEnsure::registrations();
         $body = Request::jsonBody();
         $status = $body['status'] ?? '';
         if (!in_array($status, ['approved', 'declined'], true)) {
@@ -113,35 +114,57 @@ class AdminController
         }
         Database::queryRun('UPDATE registrations SET is_approved = ? WHERE id = ?', [$status, $params['id']]);
 
-        $user = Database::queryGet(
-            'SELECT r.role, r.name, r.is_verified, l.email
-             FROM registrations r
-             JOIN logins l ON l.registration_id = r.id
-             WHERE r.id = ?',
-            [$params['id']]
-        );
+        $user = null;
+        try {
+            $user = Database::queryGet(
+                'SELECT r.role, r.name, r.is_verified, r.signup_client, l.email
+                 FROM registrations r
+                 JOIN logins l ON l.registration_id = r.id
+                 WHERE r.id = ?',
+                [$params['id']]
+            );
+        } catch (Throwable $e) {
+            $user = Database::queryGet(
+                'SELECT r.role, r.name, r.is_verified, l.email
+                 FROM registrations r
+                 JOIN logins l ON l.registration_id = r.id
+                 WHERE r.id = ?',
+                [$params['id']]
+            );
+        }
         if ($user && ($user['role'] ?? '') === 'reseller') {
             $profileStatus = $status === 'approved' ? 'approved' : 'rejected';
             Database::queryRun('UPDATE reseller_profiles SET status = ? WHERE user_id = ?', [$profileStatus, $params['id']]);
         }
 
-        // After approve, push a confirmation email if still unverified (mobile
-        // reseller register previously returned before sending one).
         $emailSent = null;
-        if ($status === 'approved' && $user && empty($user['is_verified']) && !empty($user['email'])) {
-            // Reseller apps are the main path that needs mobile-branded confirm mail.
-            $forMobile = ($user['role'] ?? '') === 'reseller';
-            $emailSent = AuthController::issueVerificationEmail(
-                (int) $params['id'],
-                (string) $user['email'],
-                (string) ($user['name'] ?? ''),
-                $forMobile
-            );
+        $approvalEmailSent = null;
+        if ($status === 'approved' && $user && ($user['role'] ?? '') === 'reseller' && !empty($user['email'])) {
+            $fromApp = AuthController::isMobileSignupClient($user['signup_client'] ?? null);
+            if ($fromApp) {
+                // Mobile-app only approval notice (no website Sign-in button).
+                $approvalEmailSent = AuthController::sendResellerApprovedForAppEmail(
+                    (string) $user['email'],
+                    (string) ($user['name'] ?? ''),
+                    !empty($user['is_verified'])
+                );
+            }
+
+            // Still unverified: re-issue confirmation (mobile template for app signups).
+            if (empty($user['is_verified'])) {
+                $emailSent = AuthController::issueVerificationEmail(
+                    (int) $params['id'],
+                    (string) $user['email'],
+                    (string) ($user['name'] ?? ''),
+                    $fromApp
+                );
+            }
         }
 
         Response::json([
             'message' => "User $status",
             'email_sent' => $emailSent,
+            'approval_email_sent' => $approvalEmailSent,
         ]);
     }
 

@@ -121,6 +121,16 @@ class AuthController
             Response::error('Registration failed — could not create account. Please try again or contact support.', 500);
         }
 
+        // Remember app vs website signup (approval mail is mobile-only).
+        try {
+            Database::queryRun(
+                'UPDATE registrations SET signup_client = ? WHERE id = ?',
+                [$isMobile ? 'mobile' : 'web', $userId]
+            );
+        } catch (Throwable $e) {
+            error_log('[register] signup_client: ' . $e->getMessage());
+        }
+
         Database::queryRun(
             'INSERT INTO logins (registration_id, email, password) VALUES (?, ?, ?)',
             [$userId, strtolower(trim($email)), $hash]
@@ -613,6 +623,47 @@ class AuthController
             ]);
         } catch (Throwable $e) {
             error_log('[sendVerificationEmail] ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    /** App signup, or legacy rows with no signup_client (pre-column mobile applicants). */
+    public static function isMobileSignupClient(mixed $signupClient): bool
+    {
+        $v = strtolower(trim((string) ($signupClient ?? '')));
+        return $v === 'mobile' || $v === '';
+    }
+
+    /**
+     * Mobile-app only: Ops approved a reseller. No website Sign-in CTA.
+     * Returns true if mail was accepted by SMTP.
+     */
+    public static function sendResellerApprovedForAppEmail(string $email, string $name, bool $emailVerified = true): bool
+    {
+        if ($email === '') {
+            return false;
+        }
+        $next = $emailVerified
+            ? '<p><strong>Next step:</strong> open the <strong>Village NetAcad</strong> mobile app and sign in with this email and your password.</p>'
+            : '<p><strong>Next steps:</strong> confirm your email (use the confirmation link, or <em>Resend confirmation email</em> on the app Sign in screen), then open the app and sign in.</p>';
+        $html = '<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#111;line-height:1.5">'
+            . '<h2 style="color:#16a34a;margin-bottom:8px">You\'re approved — sign in to the Village NetAcad app</h2>'
+            . '<p>Hi ' . htmlspecialchars($name) . ',</p>'
+            . '<p>Digititan / Ops has approved your <strong>reseller</strong> account.</p>'
+            . $next
+            . '<p style="font-size:14px;color:#333">You do not need to sign in on the website for the app — use the app Sign in screen.</p>'
+            . '<p>Welcome aboard.</p>'
+            . '<p style="margin-top:24px"><strong>The Village NetAcad Team</strong></p>'
+            . '</div>';
+
+        try {
+            return Mailer::send([
+                'to' => $email,
+                'subject' => 'You\'re approved — sign in to the Village NetAcad app',
+                'html' => $html,
+            ]);
+        } catch (Throwable $e) {
+            error_log('[sendResellerApprovedForAppEmail] ' . $e->getMessage());
             return false;
         }
     }

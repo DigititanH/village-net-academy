@@ -566,6 +566,8 @@ class ResellersController
     public static function adminStatus(array $params): void
     {
         Auth::authorize('admin');
+        SchemaEnsure::registrations();
+        SchemaEnsure::resellerProfiles();
         $body = Request::jsonBody();
         $status = $body['status'] ?? '';
         if (!in_array($status, ['approved', 'rejected', 'suspended'], true)) {
@@ -574,11 +576,51 @@ class ResellersController
 
         Database::queryRun('UPDATE reseller_profiles SET status = ? WHERE id = ?', [$status, $params['id']]);
         $profile = Database::queryGet('SELECT user_id FROM reseller_profiles WHERE id = ?', [$params['id']]);
+        $approvalEmailSent = null;
         if ($profile) {
             $userStatus = $status === 'approved' ? 'approved' : 'declined';
             Database::queryRun('UPDATE registrations SET is_approved = ? WHERE id = ?', [$userStatus, $profile['user_id']]);
+
+            if ($status === 'approved') {
+                $user = null;
+                try {
+                    $user = Database::queryGet(
+                        'SELECT r.name, r.is_verified, r.signup_client, l.email
+                         FROM registrations r
+                         JOIN logins l ON l.registration_id = r.id
+                         WHERE r.id = ?',
+                        [$profile['user_id']]
+                    );
+                } catch (Throwable $e) {
+                    $user = Database::queryGet(
+                        'SELECT r.name, r.is_verified, l.email
+                         FROM registrations r
+                         JOIN logins l ON l.registration_id = r.id
+                         WHERE r.id = ?',
+                        [$profile['user_id']]
+                    );
+                }
+                if ($user && !empty($user['email']) && AuthController::isMobileSignupClient($user['signup_client'] ?? null)) {
+                    $approvalEmailSent = AuthController::sendResellerApprovedForAppEmail(
+                        (string) $user['email'],
+                        (string) ($user['name'] ?? ''),
+                        !empty($user['is_verified'])
+                    );
+                    if (empty($user['is_verified'])) {
+                        AuthController::issueVerificationEmail(
+                            (int) $profile['user_id'],
+                            (string) $user['email'],
+                            (string) ($user['name'] ?? ''),
+                            true
+                        );
+                    }
+                }
+            }
         }
-        Response::json(['message' => "Reseller $status"]);
+        Response::json([
+            'message' => "Reseller $status",
+            'approval_email_sent' => $approvalEmailSent,
+        ]);
     }
 
     public static function adminWithdrawals(): void

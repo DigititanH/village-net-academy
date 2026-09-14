@@ -38,6 +38,10 @@ class SchemaEnsure
             if (!self::columnExists($pdo, 'registrations', 'verification_token_expires')) {
                 $pdo->exec('ALTER TABLE registrations ADD COLUMN verification_token_expires DATETIME DEFAULT NULL');
             }
+
+            if (!self::columnExists($pdo, 'registrations', 'signup_client')) {
+                $pdo->exec("ALTER TABLE registrations ADD COLUMN signup_client VARCHAR(20) DEFAULT NULL");
+            }
         } catch (Throwable $e) {
             error_log('[SchemaEnsure] registrations: ' . $e->getMessage());
         }
