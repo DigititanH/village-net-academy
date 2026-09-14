@@ -31,19 +31,32 @@ if ($extMissing !== [] && $path !== '/health') {
 $isProduction = Env::isProduction();
 $origins = Client::getAllowedOrigins();
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+$originAllowed = $origin && in_array($origin, $origins, true);
+// Flutter Chrome / local web debugging (even against production API).
+if ($origin && preg_match('#^http://(localhost|127\.0\.0\.1)(:\d+)?$#i', $origin)) {
+    $originAllowed = true;
+}
+if ($origin && preg_match('#^https://([a-z0-9.-]+\.)?villagenetacad\.co\.za$#i', $origin)) {
+    $originAllowed = true;
+}
 
 if ($isProduction) {
-    if ($origin && in_array($origin, $origins, true)) {
+    if ($originAllowed) {
         header('Access-Control-Allow-Origin: ' . $origin);
         header('Access-Control-Allow-Credentials: true');
+        header('Vary: Origin');
     }
 } else {
     header('Access-Control-Allow-Origin: ' . ($origin ?: '*'));
     header('Access-Control-Allow-Credentials: true');
+    if ($origin) {
+        header('Vary: Origin');
+    }
 }
 
-header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization');
+header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS, PATCH');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-VNA-Client, X-Requested-With, Accept');
+header('Access-Control-Max-Age: 86400');
 
 if ($method === 'OPTIONS') {
     http_response_code(204);

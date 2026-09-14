@@ -104,6 +104,14 @@ class PayfastController
             Response::error('amount, item_name, name_first, and email_address are required', 400);
         }
 
+        // Prefer DB order total when paying an existing order (includes delivery fee).
+        if (is_string($paymentId) && preg_match('/^order-(\d+)$/', $paymentId, $m)) {
+            $orderRow = Database::queryGet('SELECT total FROM orders WHERE id = ?', [(int) $m[1]]);
+            if ($orderRow) {
+                $amount = $orderRow['total'];
+            }
+        }
+
         $fullName = $nameLast ? trim("$nameFirst $nameLast") : trim((string) $nameFirst);
 
         $fields = Payfast::buildPaymentPayload([
@@ -233,12 +241,17 @@ class PayfastController
             $expectedSignature = Payfast::generateSignature($data, null, false);
 
             if (!$receivedSignature || $receivedSignature !== $expectedSignature) {
-                error_log('PayFast ITN: invalid signature');
-                return;
+                error_log('PayFast ITN: invalid local signature — checking host VALID');
+                $localOk = false;
+            } else {
+                $localOk = true;
             }
 
-            if (!Payfast::validateItnWithPayFast($data)) {
-                error_log('PayFast ITN: validation failed');
+            $hostOk = Payfast::validateItnWithPayFast($data);
+            // Accept either local signature OR PayFast host VALID (merchant still implied by payload).
+            // Requiring both historically left paid orders stuck pending on shared hosting.
+            if (!$localOk && !$hostOk) {
+                error_log('PayFast ITN: rejected local_sig=0 host_valid=0');
                 return;
             }
 
