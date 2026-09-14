@@ -38,11 +38,19 @@
         .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
         .then(function (res) {
           if (res.ok) {
-            el.innerHTML =
-              '<h1 class="ok">Email confirmed</h1>' +
-              '<p>You are all set for the <strong>Village NetAcad</strong> mobile app.</p>' +
-              '<p><strong>Next:</strong> return to the app and sign in with this email and password.</p>' +
-              '<p>You can close this browser tab.</p>';
+            if (res.j && res.j.awaiting_approval) {
+              el.innerHTML =
+                '<h1 class="ok">Email confirmed</h1>' +
+                '<p>Your email is confirmed, but your <strong>reseller</strong> account still needs Digititan / Ops approval.</p>' +
+                '<p><strong>Please wait</strong> — we will email you when you are approved and can sign in to the app.</p>' +
+                '<p>You can close this browser tab.</p>';
+            } else {
+              el.innerHTML =
+                '<h1 class="ok">Email confirmed</h1>' +
+                '<p>You are all set for the <strong>Village NetAcad</strong> mobile app.</p>' +
+                '<p><strong>Next:</strong> return to the app and sign in with this email and password.</p>' +
+                '<p>You can close this browser tab.</p>';
+            }
           } else {
             el.innerHTML =
               '<h1 class="err">Confirmation failed</h1>' +

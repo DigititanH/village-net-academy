@@ -449,7 +449,7 @@ class AuthController
         $user = null;
         try {
             $user = Database::queryGet(
-                'SELECT r.id, r.name, r.created_at, r.verification_token_expires, l.email
+                'SELECT r.id, r.name, r.role, r.is_approved, r.created_at, r.verification_token_expires, l.email
                  FROM registrations r
                  INNER JOIN logins l ON l.registration_id = r.id
                  WHERE r.verification_token = ?',
@@ -457,7 +457,7 @@ class AuthController
             );
         } catch (Throwable $e) {
             $user = Database::queryGet(
-                'SELECT r.id, r.name, r.created_at, l.email
+                'SELECT r.id, r.name, r.role, r.is_approved, r.created_at, l.email
                  FROM registrations r
                  INNER JOIN logins l ON l.registration_id = r.id
                  WHERE r.verification_token = ?',
@@ -496,13 +496,26 @@ class AuthController
 
         $forMobile = strcasecmp((string) (Request::query('client') ?? ''), 'mobile') === 0
             || strcasecmp((string) ($_SERVER['HTTP_X_VNA_CLIENT'] ?? ''), 'mobile') === 0;
-        self::sendWelcomeEmail((string) $user['email'], (string) $user['name'], $forMobile);
+        $awaitingApproval = ($user['role'] ?? '') === 'reseller'
+            && strtolower((string) ($user['is_approved'] ?? '')) === 'pending';
+        self::sendWelcomeEmail(
+            (string) $user['email'],
+            (string) $user['name'],
+            $forMobile,
+            $awaitingApproval
+        );
+
+        $message = 'Email verified successfully';
+        if ($forMobile) {
+            $message = $awaitingApproval
+                ? 'Email verified. Your reseller account still needs Digititan / Ops approval — we will email you when you can sign in.'
+                : 'Email verified successfully. Open the Village NetAcad app and sign in.';
+        }
 
         Response::json([
-            'message' => $forMobile
-                ? 'Email verified successfully. Open the Village NetAcad app and sign in.'
-                : 'Email verified successfully',
+            'message' => $message,
             'client' => $forMobile ? 'mobile' : 'web',
+            'awaiting_approval' => $awaitingApproval,
         ]);
     }
 
@@ -668,19 +681,39 @@ class AuthController
         }
     }
 
-    private static function sendWelcomeEmail(string $email, string $name, bool $forMobile = false): void
-    {
+    private static function sendWelcomeEmail(
+        string $email,
+        string $name,
+        bool $forMobile = false,
+        bool $awaitingResellerApproval = false
+    ): void {
         if ($forMobile) {
-            $html = '<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#111;line-height:1.5">'
-                . '<h2 style="color:#16a34a;margin-bottom:8px">You\'re confirmed — open the app</h2>'
-                . '<p>Hi ' . htmlspecialchars($name) . ',</p>'
-                . '<p>Your email is confirmed. Welcome to the <strong>Village NetAcad</strong> program.</p>'
-                . '<p><strong>Next step:</strong> open the <strong>Village NetAcad</strong> mobile app on your phone and sign in with this email and your password.</p>'
-                . '<p style="font-size:14px;color:#333">You do not need to sign in on the website for the app — use the app Sign in screen.</p>'
-                . '<p>We look forward to learning with you.</p>'
-                . '<p style="margin-top:24px"><strong>The Village NetAcad Team</strong></p>'
-                . '</div>';
-            $subject = 'Email confirmed — open the Village NetAcad app';
+            if ($awaitingResellerApproval) {
+                $html = '<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#111;line-height:1.5">'
+                    . '<h2 style="color:#16a34a;margin-bottom:8px">You\'re confirmed — wait for approval</h2>'
+                    . '<p>Hi ' . htmlspecialchars($name) . ',</p>'
+                    . '<p>Your email is confirmed. Welcome to the <strong>Village NetAcad</strong> program.</p>'
+                    . '<p><strong>Important:</strong> confirming your email does <em>not</em> unlock the reseller app yet. '
+                    . 'Digititan / Ops still needs to approve your reseller account.</p>'
+                    . '<p>Please wait for that approval. <strong>We will email you</strong> when you are approved '
+                    . 'so you can open the Village NetAcad app and sign in.</p>'
+                    . '<p style="font-size:14px;color:#333">Until then, sign-in in the app will stay blocked.</p>'
+                    . '<p>Thanks for your patience.</p>'
+                    . '<p style="margin-top:24px"><strong>The Village NetAcad Team</strong></p>'
+                    . '</div>';
+                $subject = 'Email confirmed — wait for reseller approval';
+            } else {
+                $html = '<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#111;line-height:1.5">'
+                    . '<h2 style="color:#16a34a;margin-bottom:8px">You\'re confirmed — open the app</h2>'
+                    . '<p>Hi ' . htmlspecialchars($name) . ',</p>'
+                    . '<p>Your email is confirmed. Welcome to the <strong>Village NetAcad</strong> program.</p>'
+                    . '<p><strong>Next step:</strong> open the <strong>Village NetAcad</strong> mobile app on your phone and sign in with this email and your password.</p>'
+                    . '<p style="font-size:14px;color:#333">You do not need to sign in on the website for the app — use the app Sign in screen.</p>'
+                    . '<p>We look forward to learning with you.</p>'
+                    . '<p style="margin-top:24px"><strong>The Village NetAcad Team</strong></p>'
+                    . '</div>';
+                $subject = 'Email confirmed — open the Village NetAcad app';
+            }
         } else {
             $loginUrl = rtrim((string) Client::getClientUrl(), '/') . '/login';
             $html = '<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#111;line-height:1.5">'
