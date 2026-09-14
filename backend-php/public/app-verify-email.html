@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Confirm email — Village NetAcad app</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #0f172a; color: #e2e8f0; margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .card { max-width: 420px; width: 100%; background: #1e293b; border-radius: 16px; padding: 28px 24px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+    h1 { font-size: 1.35rem; margin: 0 0 12px; color: #fff; }
+    p { margin: 0 0 12px; line-height: 1.5; color: #cbd5e1; font-size: 0.95rem; }
+    .ok { color: #4ade80; }
+    .err { color: #f87171; }
+    .spin { display: inline-block; width: 28px; height: 28px; border: 3px solid #334155; border-top-color: #22c55e; border-radius: 50%; animation: s 0.8s linear infinite; margin-bottom: 14px; }
+    @keyframes s { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div id="state">
+      <div class="spin" aria-hidden="true"></div>
+      <h1>Confirming your email…</h1>
+      <p>Please wait a moment.</p>
+    </div>
+  </div>
+  <script>
+    (function () {
+      var params = new URLSearchParams(window.location.search);
+      var token = params.get('token') || '';
+      var el = document.getElementById('state');
+      if (!token) {
+        el.innerHTML = '<h1 class="err">Missing link</h1><p>Open the confirmation button from your email again, or use Resend in the Village NetAcad app.</p>';
+        return;
+      }
+      fetch('/api/auth/verify-email?token=' + encodeURIComponent(token) + '&client=mobile', {
+        headers: { 'Accept': 'application/json', 'X-VNA-Client': 'mobile' }
+      })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (res) {
+          if (res.ok) {
+            el.innerHTML =
+              '<h1 class="ok">Email confirmed</h1>' +
+              '<p>You are all set for the <strong>Village NetAcad</strong> mobile app.</p>' +
+              '<p><strong>Next:</strong> return to the app and sign in with this email and password.</p>' +
+              '<p>You can close this browser tab.</p>';
+          } else {
+            el.innerHTML =
+              '<h1 class="err">Confirmation failed</h1>' +
+              '<p>' + (res.j && res.j.message ? res.j.message : 'Invalid or expired link') + '</p>' +
+              '<p>In the app, open Sign in and tap <em>Resend confirmation email</em>.</p>';
+          }
+        })
+        .catch(function () {
+          el.innerHTML =
+            '<h1 class="err">Could not reach the server</h1>' +
+            '<p>Check your connection, then try the email link again or resend from the app.</p>';
+        });
+    })();
+  </script>
+</body>
+</html>

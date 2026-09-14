@@ -50,6 +50,7 @@ export default function VerifyEmail() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token") || "";
   const emailFromQuery = searchParams.get("email") || "";
+  const fromMobile = (searchParams.get("client") || "").toLowerCase() === "mobile";
   const [status, setStatus] = useState(token ? "loading" : emailFromQuery ? "pending" : "missing");
   const [message, setMessage] = useState("");
   const [resendEmail, setResendEmail] = useState(emailFromQuery);
@@ -58,7 +59,9 @@ export default function VerifyEmail() {
     if (!token) return;
     let cancelled = false;
     api
-      .get("/auth/verify-email", { params: { token } })
+      .get("/auth/verify-email", {
+        params: { token, ...(fromMobile ? { client: "mobile" } : {}) },
+      })
       .then((res) => {
         if (cancelled) return;
         setStatus("success");
@@ -88,10 +91,21 @@ export default function VerifyEmail() {
           <>
             <CheckCircle size={40} className="mx-auto mb-4 text-burnt-400" />
             <h1 className="text-xl font-bold mb-2">Registration confirmed</h1>
-            <p className="text-sm text-gray-400 mb-6">{message}. You can now sign in and access courses.</p>
-            <Link to="/login" className="btn-primary inline-flex">
-              Sign in
-            </Link>
+            {fromMobile || (message || "").toLowerCase().includes("open the village netacad app") ? (
+              <>
+                <p className="text-sm text-gray-400 mb-6">
+                  {message}. Return to the <strong>Village NetAcad</strong> mobile app and sign in there.
+                </p>
+                <p className="text-sm text-gray-500">You can close this tab — no website sign-in needed for the app.</p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-gray-400 mb-6">{message}. You can now sign in and access courses.</p>
+                <Link to="/login" className="btn-primary inline-flex">
+                  Sign in
+                </Link>
+              </>
+            )}
           </>
         )}
         {status === "error" && (

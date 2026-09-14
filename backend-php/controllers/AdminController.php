@@ -129,10 +129,13 @@ class AdminController
         // reseller register previously returned before sending one).
         $emailSent = null;
         if ($status === 'approved' && $user && empty($user['is_verified']) && !empty($user['email'])) {
+            // Reseller apps are the main path that needs mobile-branded confirm mail.
+            $forMobile = ($user['role'] ?? '') === 'reseller';
             $emailSent = AuthController::issueVerificationEmail(
                 (int) $params['id'],
                 (string) $user['email'],
-                (string) ($user['name'] ?? '')
+                (string) ($user['name'] ?? ''),
+                $forMobile
             );
         }
 

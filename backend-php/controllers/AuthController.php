@@ -183,7 +183,7 @@ class AuthController
             // until the website "resend" path is used.
             $emailSent = false;
             if ($verificationToken) {
-                $emailSent = self::sendVerificationEmail($email, $name, $verificationToken);
+                $emailSent = self::sendVerificationEmail($email, $name, $verificationToken, $isMobile);
                 if (!$emailSent) {
                     error_log('[register] reseller verify mail failed: ' . (Mailer::$lastError ?? 'unknown'));
                 }
@@ -264,7 +264,7 @@ class AuthController
         }
 
         if ($verificationToken) {
-            $emailSent = self::sendVerificationEmail($email, $name, $verificationToken);
+            $emailSent = self::sendVerificationEmail($email, $name, $verificationToken, $isMobile);
 
             $message = $emailSent
                 ? 'Account created. Please check your email and click the confirmation link before signing in.'
@@ -484,24 +484,16 @@ class AuthController
             );
         }
 
-        $loginUrl = Client::getClientUrl() . '/login';
-        Mailer::send([
-            'to' => $user['email'],
-            'subject' => 'Welcome to the Village NetAcad program',
-            'html' => '<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#111;line-height:1.5">'
-                . '<h2 style="color:#16a34a;margin-bottom:8px">Welcome to the Village NetAcad program!</h2>'
-                . '<p>Hi ' . htmlspecialchars($user['name']) . ',</p>'
-                . '<p>Your email has been confirmed. We are excited to welcome you to the <strong>Village NetAcad</strong> program — your journey into networking education starts here.</p>'
-                . '<p>You can now sign in and explore your courses.</p>'
-                . '<p style="margin:28px 0">'
-                . '<a href="' . htmlspecialchars($loginUrl) . '" style="background:#16a34a;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold">'
-                . 'Sign in to Village NetAcad</a></p>'
-                . '<p>We look forward to learning with you.</p>'
-                . '<p style="margin-top:24px"><strong>The Village NetAcad Team</strong></p>'
-                . '</div>',
-        ]);
+        $forMobile = strcasecmp((string) (Request::query('client') ?? ''), 'mobile') === 0
+            || strcasecmp((string) ($_SERVER['HTTP_X_VNA_CLIENT'] ?? ''), 'mobile') === 0;
+        self::sendWelcomeEmail((string) $user['email'], (string) $user['name'], $forMobile);
 
-        Response::json(['message' => 'Email verified successfully']);
+        Response::json([
+            'message' => $forMobile
+                ? 'Email verified successfully. Open the Village NetAcad app and sign in.'
+                : 'Email verified successfully',
+            'client' => $forMobile ? 'mobile' : 'web',
+        ]);
     }
 
     public static function resendVerification(): void
@@ -521,7 +513,8 @@ class AuthController
             $emailSent = self::issueVerificationEmail(
                 (int) $user['id'],
                 $email,
-                (string) $user['name']
+                (string) $user['name'],
+                self::isMobileRequest($body)
             );
             if (!$emailSent) {
                 error_log('[resendVerification] mail failed: ' . (Mailer::$lastError ?? 'unknown'));
@@ -535,8 +528,12 @@ class AuthController
     }
 
     /** Refresh token + send confirmation email. Used by resend + admin approve. */
-    public static function issueVerificationEmail(int $userId, string $email, string $name): bool
-    {
+    public static function issueVerificationEmail(
+        int $userId,
+        string $email,
+        string $name,
+        bool $forMobile = false
+    ): bool {
         if ($userId < 1 || $email === '') {
             return false;
         }
@@ -553,33 +550,110 @@ class AuthController
                 [$token, $userId]
             );
         }
-        return self::sendVerificationEmail($email, $name, $token);
+        return self::sendVerificationEmail($email, $name, $token, $forMobile);
     }
 
-    private static function sendVerificationEmail(string $email, string $name, string $verificationToken): bool
+    private static function isMobileRequest(?array $body = null): bool
     {
-        $verifyUrl = Client::getClientUrl() . '/verify-email?token=' . urlencode($verificationToken);
+        $body = $body ?? [];
+        $client = strtolower(trim((string) ($body['client'] ?? '')));
+        return $client === 'mobile'
+            || strcasecmp((string) ($_SERVER['HTTP_X_VNA_CLIENT'] ?? ''), 'mobile') === 0;
+    }
+
+    private static function sendVerificationEmail(
+        string $email,
+        string $name,
+        string $verificationToken,
+        bool $forMobile = false
+    ): bool {
+        $base = rtrim((string) Client::getClientUrl(), '/');
+        if ($forMobile) {
+            // Lightweight page in public/ — tells user to return to the app (no website login CTA).
+            $verifyUrl = $base . '/app-verify-email.html?token=' . urlencode($verificationToken);
+            $subject = 'Confirm your email — Village NetAcad app';
+            $html = '<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#111;line-height:1.5">'
+                . '<h2 style="color:#16a34a;margin-bottom:8px">Confirm your email for the app</h2>'
+                . '<p>Hi ' . htmlspecialchars($name) . ',</p>'
+                . '<p>Thanks for signing up in the <strong>Village NetAcad mobile app</strong>. '
+                . 'Tap the button below to confirm this email address.</p>'
+                . '<p style="margin:28px 0">'
+                . '<a href="' . htmlspecialchars($verifyUrl) . '" style="background:#16a34a;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold">'
+                . 'Confirm my email</a></p>'
+                . '<p style="font-size:14px;color:#333"><strong>Then open the Village NetAcad app</strong> on your phone and sign in with this email.</p>'
+                . '<p style="font-size:14px;color:#333">This link works for 24 hours. If it expires, use <em>Resend confirmation email</em> on the app sign-in screen.</p>'
+                . '<p style="font-size:13px;color:#555">If the button does not work, copy and paste this link into your browser:<br>'
+                . htmlspecialchars($verifyUrl) . '</p>'
+                . '<p style="margin-top:24px"><strong>The Village NetAcad Team</strong></p>'
+                . '<p style="font-size:13px;color:#555">If you did not create this account, you can ignore this email.</p>'
+                . '</div>';
+        } else {
+            $verifyUrl = $base . '/verify-email?token=' . urlencode($verificationToken);
+            $subject = 'Confirm your email — Village NetAcad';
+            $html = '<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#111;line-height:1.5">'
+                . '<h2 style="color:#16a34a;margin-bottom:8px">Confirm your email address</h2>'
+                . '<p>Hi ' . htmlspecialchars($name) . ',</p>'
+                . '<p>Thank you for registering with <strong>Village NetAcad</strong>. Please confirm your email address to activate your account.</p>'
+                . '<p style="margin:28px 0">'
+                . '<a href="' . htmlspecialchars($verifyUrl) . '" style="background:#16a34a;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold">'
+                . 'Confirm my email</a></p>'
+                . '<p style="font-size:14px;color:#333"><strong>This confirmation link is available for 24 hours.</strong> If it expires, you can request another link from the website.</p>'
+                . '<p style="font-size:13px;color:#555">If the button does not work, copy and paste this link into your browser:<br>'
+                . htmlspecialchars($verifyUrl) . '</p>'
+                . '<p style="margin-top:24px"><strong>The Village NetAcad Team</strong></p>'
+                . '<p style="font-size:13px;color:#555">If you did not create this account, you can ignore this email.</p>'
+                . '</div>';
+        }
+
         try {
             return Mailer::send([
                 'to' => $email,
-                'subject' => 'Confirm your email — Village NetAcad',
-                'html' => '<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#111;line-height:1.5">'
-                    . '<h2 style="color:#16a34a;margin-bottom:8px">Confirm your email address</h2>'
-                    . '<p>Hi ' . htmlspecialchars($name) . ',</p>'
-                    . '<p>Thank you for registering with <strong>Village NetAcad</strong>. Please confirm your email address to activate your account.</p>'
-                    . '<p style="margin:28px 0">'
-                    . '<a href="' . htmlspecialchars($verifyUrl) . '" style="background:#16a34a;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold">'
-                    . 'Confirm my email</a></p>'
-                    . '<p style="font-size:14px;color:#333"><strong>This confirmation link is available for 24 hours.</strong> If it expires, you can request another link from the website.</p>'
-                    . '<p style="font-size:13px;color:#555">If the button does not work, copy and paste this link into your browser:<br>'
-                    . htmlspecialchars($verifyUrl) . '</p>'
-                    . '<p style="margin-top:24px"><strong>The Village NetAcad Team</strong></p>'
-                    . '<p style="font-size:13px;color:#555">If you did not create this account, you can ignore this email.</p>'
-                    . '</div>',
+                'subject' => $subject,
+                'html' => $html,
             ]);
         } catch (Throwable $e) {
             error_log('[sendVerificationEmail] ' . $e->getMessage());
             return false;
+        }
+    }
+
+    private static function sendWelcomeEmail(string $email, string $name, bool $forMobile = false): void
+    {
+        if ($forMobile) {
+            $html = '<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#111;line-height:1.5">'
+                . '<h2 style="color:#16a34a;margin-bottom:8px">You\'re confirmed — open the app</h2>'
+                . '<p>Hi ' . htmlspecialchars($name) . ',</p>'
+                . '<p>Your email is confirmed. Welcome to the <strong>Village NetAcad</strong> program.</p>'
+                . '<p><strong>Next step:</strong> open the <strong>Village NetAcad</strong> mobile app on your phone and sign in with this email and your password.</p>'
+                . '<p style="font-size:14px;color:#333">You do not need to sign in on the website for the app — use the app Sign in screen.</p>'
+                . '<p>We look forward to learning with you.</p>'
+                . '<p style="margin-top:24px"><strong>The Village NetAcad Team</strong></p>'
+                . '</div>';
+            $subject = 'Email confirmed — open the Village NetAcad app';
+        } else {
+            $loginUrl = rtrim((string) Client::getClientUrl(), '/') . '/login';
+            $html = '<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#111;line-height:1.5">'
+                . '<h2 style="color:#16a34a;margin-bottom:8px">Welcome to the Village NetAcad program!</h2>'
+                . '<p>Hi ' . htmlspecialchars($name) . ',</p>'
+                . '<p>Your email has been confirmed. We are excited to welcome you to the <strong>Village NetAcad</strong> program — your journey into networking education starts here.</p>'
+                . '<p>You can now sign in and explore your courses.</p>'
+                . '<p style="margin:28px 0">'
+                . '<a href="' . htmlspecialchars($loginUrl) . '" style="background:#16a34a;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold">'
+                . 'Sign in to Village NetAcad</a></p>'
+                . '<p>We look forward to learning with you.</p>'
+                . '<p style="margin-top:24px"><strong>The Village NetAcad Team</strong></p>'
+                . '</div>';
+            $subject = 'Welcome to the Village NetAcad program';
+        }
+
+        try {
+            Mailer::send([
+                'to' => $email,
+                'subject' => $subject,
+                'html' => $html,
+            ]);
+        } catch (Throwable $e) {
+            error_log('[sendWelcomeEmail] ' . $e->getMessage());
         }
     }
 
