@@ -96,8 +96,12 @@ class AdminController
         Auth::authorize('admin');
         $body = Request::jsonBody();
         $role = $body['role'] ?? '';
-        if (!in_array($role, ['admin', 'super_admin', 'reseller', 'customer', 'academy'], true)) {
+        if (!in_array($role, ['admin', 'super_admin', 'reseller', 'customer', 'academy', 'finance', 'finance_admin'], true)) {
             Response::error('Invalid role', 400);
+        }
+        // Promoting someone to staff is Ops-owner only (same as invites).
+        if (in_array($role, ['admin', 'super_admin', 'finance', 'finance_admin', 'ops_admin'], true)) {
+            AccountSecurity::requireOpsOwner();
         }
         Database::queryRun('UPDATE registrations SET role = ? WHERE id = ?', [$role, $params['id']]);
         Response::json(['message' => 'User role updated']);
@@ -441,6 +445,7 @@ class AdminController
     public static function addAdmin(): void
     {
         Auth::authorize('admin');
+        AccountSecurity::requireOpsOwner();
         SchemaEnsure::registrations();
         SchemaEnsure::logins();
         $body = Request::jsonBody();
@@ -528,6 +533,7 @@ class AdminController
     public static function userActive(array $params): void
     {
         Auth::authorize('admin');
+        AccountSecurity::requireOpsOwner();
         SchemaEnsure::registrations();
         $body = Request::jsonBody();
         $active = !empty($body['active']) || $body['active'] === true || $body['active'] === 1 || $body['active'] === '1';
@@ -549,6 +555,7 @@ class AdminController
     public static function userPassword(array $params): void
     {
         Auth::authorize('admin');
+        AccountSecurity::requireOpsOwner();
         SchemaEnsure::logins();
         $id = (int) $params['id'];
         $row = Database::queryGet(

@@ -88,6 +88,27 @@ class AccountSecurity
         return (int) $user['is_active'] !== 0;
     }
 
+    /** Canonical Digititan Ops account — only this mailbox may invite / manage staff. */
+    public const OPS_OWNER_EMAIL = 'admin@villagenetacad.com';
+
+    public static function isOpsOwner(?array $user = null): bool
+    {
+        $user = $user ?? Auth::$user;
+        $email = strtolower(trim((string) ($user['email'] ?? '')));
+        return $email === self::OPS_OWNER_EMAIL;
+    }
+
+    public static function requireOpsOwner(): void
+    {
+        Auth::authenticate();
+        if (!self::isOpsOwner()) {
+            Response::error(
+                'Only Digititan Ops (admin@villagenetacad.com) can invite or manage staff accounts.',
+                403
+            );
+        }
+    }
+
     public static function sendApp(string $to, string $subject, string $html): void
     {
         if ($to === '' || $subject === '') {
