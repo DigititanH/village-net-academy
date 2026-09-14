@@ -45,6 +45,7 @@ class Router
         self::post('/api/auth/resend-verification', [AuthController::class, 'resendVerification']);
         self::post('/api/auth/forgot-password', [AuthController::class, 'forgotPassword']);
         self::post('/api/auth/reset-password', [AuthController::class, 'resetPassword']);
+        self::post('/api/auth/change-password', [AuthController::class, 'changePassword']);
         self::get('/api/auth/me', [AuthController::class, 'me']);
         self::post('/api/auth/logout', [AuthController::class, 'logout']);
 
@@ -85,6 +86,7 @@ class Router
         // Reviews
         self::get('/api/reviews/product/{productId}', fn ($p) => ReviewsController::byProduct($p));
         self::post('/api/reviews', [ReviewsController::class, 'create']);
+        self::put('/api/reviews/{id}', fn ($p) => ReviewsController::update($p));
         self::delete('/api/reviews/{id}', fn ($p) => ReviewsController::destroy($p));
 
         // Contact
@@ -106,10 +108,18 @@ class Router
         self::post('/api/payfast/notify', [PayfastController::class, 'notify']);
 
         // Resellers
+        self::get('/api/resellers/verify/{code}', fn ($p) => ResellersController::verify($p));
         self::get('/api/resellers/profile', [ResellersController::class, 'profile']);
         self::post('/api/resellers/profile/banking', [ResellersController::class, 'updateBanking']);
         self::get('/api/resellers/commissions', [ResellersController::class, 'commissions']);
         self::get('/api/resellers/sales', [ResellersController::class, 'sales']);
+        // Closures: is_callable([Class,'method']) autoloads + requires the method to exist
+        // at registerRoutes() time — a CRM Router without matching ResellersController methods
+        // would 500 the entire API (including /health and login). Closures defer that check.
+        self::get('/api/resellers/statement', fn () => ResellersController::statement());
+        self::get('/api/resellers/clients', fn () => ResellersController::clients());
+        self::post('/api/resellers/clients', fn () => ResellersController::addClient());
+        self::put('/api/resellers/clients/{id}', fn ($p) => ResellersController::updateClient($p));
         self::post('/api/resellers/withdraw', [ResellersController::class, 'withdraw']);
         self::get('/api/resellers/withdrawals', [ResellersController::class, 'withdrawals']);
         self::get('/api/resellers/admin/all', [ResellersController::class, 'adminAll']);

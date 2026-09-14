@@ -5,6 +5,9 @@ class ResellersController
     /** Centre / academy share of referred sales (percent of order total). */
     public const ACADEMY_COMMISSION_RATE = Commission::ACADEMY_RATE;
 
+    /** Matches existing withdraw minimum (R100). */
+    private const MIN_WITHDRAWAL_ZAR = 100.0;
+
     private static function requireApprovedReseller(): void
     {
         $profile = Database::queryGet('SELECT status FROM reseller_profiles WHERE user_id = ?', [Auth::$user['id']]);
@@ -25,6 +28,56 @@ class ResellersController
         if (in_array($profile['status'], ['rejected', 'suspended'], true)) {
             Response::error('Reseller account is not active', 403);
         }
+    }
+
+    /** True when office UAT may withdraw on a non–last day. */
+    private static function allowWithdrawUat(): bool
+    {
+        if (!class_exists('Env')) {
+            return false;
+        }
+        $flag = strtolower(trim((string) (Env::get('ALLOW_WITHDRAW_UAT') ?? '')));
+        return in_array($flag, ['1', 'true', 'yes'], true);
+    }
+
+    private static function ensureResellerClientsTable(): void
+    {
+        if (class_exists('SchemaEnsure') && method_exists('SchemaEnsure', 'resellerClients')) {
+            SchemaEnsure::resellerClients();
+        }
+    }
+
+    /**
+     * Public legitimacy check — no auth, no wallet/bank/email secrets.
+     * GET /api/resellers/verify/{code}
+     */
+    public static function verify(array $params): void
+    {
+        $code = strtoupper(trim((string) ($params['code'] ?? '')));
+        if ($code === '') {
+            Response::error('Reseller code is required', 400);
+        }
+
+        $row = Database::queryGet(
+            'SELECT rp.referral_code, rp.status, rp.academy, r.name
+             FROM reseller_profiles rp
+             JOIN registrations r ON rp.user_id = r.id
+             WHERE UPPER(rp.referral_code) = ?',
+            [$code]
+        );
+        if (!$row) {
+            Response::error('Code not found or inactive', 404);
+        }
+
+        $approved = ($row['status'] ?? '') === 'approved';
+        Response::json([
+            'code' => $row['referral_code'],
+            'name' => $row['name'],
+            'academy' => $row['academy'],
+            'status' => $row['status'],
+            'approved' => $approved,
+            'active' => $approved,
+        ]);
     }
 
     public static function profile(): void
@@ -61,8 +114,10 @@ class ResellersController
             $decoded = json_decode((string) ($raw ?? ''), true);
             $data = is_array($decoded) ? $decoded : [];
         }
+        $accountName = trim((string) ($data['account_name'] ?? $data['account_holder'] ?? ''));
         return [
-            'account_name' => trim((string) ($data['account_name'] ?? '')),
+            'account_name' => $accountName,
+            'account_holder' => $accountName,
             'bank_name' => trim((string) ($data['bank_name'] ?? '')),
             'account_number' => trim((string) ($data['account_number'] ?? '')),
             'branch_code' => trim((string) ($data['branch_code'] ?? '')),
@@ -73,16 +128,31 @@ class ResellersController
     /** @return array{account_name:string,bank_name:string,account_number:string,branch_code:string,account_type:string}|null */
     private static function normalizeBankInput(array $bankDetails): ?array
     {
-        $accountName = trim((string) ($bankDetails['account_name'] ?? ''));
-        $bankName = trim((string) ($bankDetails['bank_name'] ?? ''));
-        $accountNumber = trim((string) ($bankDetails['account_number'] ?? ''));
-        $branchCode = trim((string) ($bankDetails['branch_code'] ?? ''));
-        $accountType = trim((string) ($bankDetails['account_type'] ?? 'Cheque'));
+        $accountName = trim((string) (
+            $bankDetails['account_name']
+            ?? $bankDetails['account_holder']
+            ?? $bankDetails['accountName']
+            ?? $bankDetails['accountHolder']
+            ?? ''
+        ));
+        $bankName = trim((string) ($bankDetails['bank_name'] ?? $bankDetails['bankName'] ?? ''));
+        $accountNumber = preg_replace(
+            '/\s+/',
+            '',
+            (string) ($bankDetails['account_number'] ?? $bankDetails['accountNumber'] ?? '')
+        ) ?? '';
+        $branchCode = preg_replace(
+            '/\s+/',
+            '',
+            (string) ($bankDetails['branch_code'] ?? $bankDetails['branchCode'] ?? '')
+        ) ?? '';
+        $accountType = trim((string) ($bankDetails['account_type'] ?? $bankDetails['accountType'] ?? 'Cheque'));
         if ($accountName === '' || $bankName === '' || $accountNumber === '' || $branchCode === '') {
             return null;
         }
         return [
             'account_name' => $accountName,
+            'account_holder' => $accountName,
             'bank_name' => $bankName,
             'account_number' => $accountNumber,
             'branch_code' => $branchCode,
@@ -102,7 +172,7 @@ class ResellersController
 
         $body = array_merge($_POST, Request::jsonBody());
         $bankPayload = self::normalizeBankInput([
-            'account_name' => $body['account_name'] ?? '',
+            'account_name' => $body['account_name'] ?? $body['account_holder'] ?? '',
             'bank_name' => $body['bank_name'] ?? '',
             'account_number' => $body['account_number'] ?? '',
             'branch_code' => $body['branch_code'] ?? '',
@@ -168,6 +238,231 @@ class ResellersController
         ));
     }
 
+    /**
+     * Month-end earnings statement from live commissions.
+     * GET /api/resellers/statement?month=YYYY-MM (defaults to current UTC month)
+     */
+    public static function statement(): void
+    {
+        Auth::authorize('reseller');
+        self::requireApprovedReseller();
+        SchemaEnsure::resellerProfiles();
+        $profile = Database::queryGet(
+            'SELECT id, referral_code, commission_rate, academy, wallet_balance, total_earned
+             FROM reseller_profiles WHERE user_id = ?',
+            [Auth::$user['id']]
+        );
+        if (!$profile) {
+            Response::error('Profile not found', 404);
+        }
+
+        $month = trim((string) (Request::query('month') ?? ''));
+        if ($month === '' || !preg_match('/^\d{4}-\d{2}$/', $month)) {
+            $month = gmdate('Y-m');
+        }
+        $start = $month . '-01 00:00:00';
+        $end = gmdate('Y-m-d H:i:s', strtotime($start . ' +1 month'));
+
+        $lines = [];
+        try {
+            $lines = Database::queryAll(
+                "SELECT c.id, c.amount, c.party, c.share_percent, c.created_at,
+                        o.id AS order_id, o.total AS order_total, o.created_at AS order_date,
+                        r.name AS customer_name
+                 FROM commissions c
+                 JOIN orders o ON o.id = c.order_id
+                 JOIN registrations r ON r.id = o.user_id
+                 WHERE c.reseller_id = ?
+                   AND c.created_at >= ? AND c.created_at < ?
+                 ORDER BY c.created_at DESC",
+                [$profile['id'], $start, $end]
+            );
+        } catch (Throwable $e) {
+            $lines = Database::queryAll(
+                "SELECT c.id, c.amount, c.created_at,
+                        o.id AS order_id, o.total AS order_total, o.created_at AS order_date,
+                        r.name AS customer_name
+                 FROM commissions c
+                 JOIN orders o ON o.id = c.order_id
+                 JOIN registrations r ON r.id = o.user_id
+                 WHERE c.reseller_id = ?
+                   AND c.created_at >= ? AND c.created_at < ?
+                 ORDER BY c.created_at DESC",
+                [$profile['id'], $start, $end]
+            );
+            foreach ($lines as &$line) {
+                $line['party'] = 'seller';
+                $line['share_percent'] = null;
+            }
+            unset($line);
+        }
+
+        $sellerEarned = 0.0;
+        $centreEarned = 0.0;
+        $digititanDue = 0.0;
+        $orderTotal = 0.0;
+        $seenOrders = [];
+        foreach ($lines as $line) {
+            $party = (string) ($line['party'] ?? 'seller');
+            $amt = (float) $line['amount'];
+            if ($party === 'digititan') {
+                $digititanDue += $amt;
+            } elseif ($party === 'centre') {
+                $centreEarned += $amt;
+            } else {
+                $sellerEarned += $amt;
+            }
+            $oid = (string) ($line['order_id'] ?? '');
+            if ($oid !== '' && !isset($seenOrders[$oid])) {
+                $seenOrders[$oid] = true;
+                $orderTotal += (float) ($line['order_total'] ?? 0);
+            }
+        }
+
+        if ($digititanDue <= 0 && $orderTotal > 0) {
+            $walletLines = $sellerEarned + $centreEarned;
+            $digititanDue = max(0, round($orderTotal - $walletLines, 2));
+        }
+
+        $ref = strtoupper(trim((string) $profile['referral_code']));
+        $isCentre = strpos($ref, 'VNA-C-') === 0;
+        $affiliated = !$isCentre && trim((string) ($profile['academy'] ?? '')) !== '';
+
+        Response::json([
+            'month' => $month,
+            'referral_code' => $profile['referral_code'],
+            'commission_rate' => (float) $profile['commission_rate'],
+            'academy' => $profile['academy'],
+            'is_centre' => $isCentre,
+            'affiliated' => $affiliated,
+            'wallet_balance' => (float) $profile['wallet_balance'],
+            'total_earned' => (float) $profile['total_earned'],
+            'period' => [
+                'orders_total' => round($orderTotal, 2),
+                'seller_earned' => round($sellerEarned, 2),
+                'centre_earned' => round($centreEarned, 2),
+                'digititan_due' => round($digititanDue, 2),
+                'line_count' => count($lines),
+            ],
+            'lines' => $lines,
+            'withdraw_rules' => [
+                'min_zar' => self::MIN_WITHDRAWAL_ZAR,
+                'last_calendar_day_only' => true,
+            ],
+        ]);
+    }
+
+    public static function clients(): void
+    {
+        Auth::authorize('reseller');
+        SchemaEnsure::resellerProfiles();
+        self::ensureResellerClientsTable();
+        $profile = Database::queryGet(
+            'SELECT id, status FROM reseller_profiles WHERE user_id = ?',
+            [Auth::$user['id']]
+        );
+        if (!$profile) {
+            Response::error('Profile not found', 404);
+        }
+        // Pending / rejected: empty list so the app shell can still open.
+        if (($profile['status'] ?? '') !== 'approved') {
+            Response::json([]);
+            return;
+        }
+        try {
+            Response::json(Database::queryAll(
+                'SELECT * FROM reseller_clients WHERE reseller_id = ? ORDER BY updated_at DESC',
+                [$profile['id']]
+            ));
+        } catch (Throwable $e) {
+            Response::json([]);
+        }
+    }
+
+    public static function addClient(): void
+    {
+        Auth::authorize('reseller');
+        self::requireApprovedReseller();
+        SchemaEnsure::resellerProfiles();
+        self::ensureResellerClientsTable();
+        $profile = Database::queryGet('SELECT id FROM reseller_profiles WHERE user_id = ?', [Auth::$user['id']]);
+        if (!$profile) {
+            Response::error('Profile not found', 404);
+        }
+
+        $body = Request::jsonBody();
+        $name = trim((string) ($body['name'] ?? ''));
+        $email = strtolower(trim((string) ($body['email'] ?? '')));
+        $interest = trim((string) ($body['product_interest'] ?? $body['productInterest'] ?? ''));
+        $status = self::normalizeClientStatus($body['status'] ?? 'pending');
+
+        if ($name === '' || $email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            Response::error('Name and valid email are required', 400);
+        }
+
+        try {
+            $result = Database::queryRun(
+                'INSERT INTO reseller_clients (reseller_id, name, email, product_interest, status)
+                 VALUES (?, ?, ?, ?, ?)',
+                [$profile['id'], $name, $email, $interest !== '' ? $interest : null, $status]
+            );
+        } catch (Throwable $e) {
+            Response::error('Clients table missing or schema mismatch. Contact Digititan support.', 500);
+        }
+        $row = Database::queryGet('SELECT * FROM reseller_clients WHERE id = ?', [$result['lastInsertRowid']]);
+        Response::json($row, 201);
+    }
+
+    public static function updateClient(array $params): void
+    {
+        Auth::authorize('reseller');
+        self::requireApprovedReseller();
+        SchemaEnsure::resellerProfiles();
+        self::ensureResellerClientsTable();
+        $profile = Database::queryGet('SELECT id FROM reseller_profiles WHERE user_id = ?', [Auth::$user['id']]);
+        if (!$profile) {
+            Response::error('Profile not found', 404);
+        }
+
+        $clientId = (int) ($params['id'] ?? 0);
+        try {
+            $row = Database::queryGet(
+                'SELECT * FROM reseller_clients WHERE id = ? AND reseller_id = ?',
+                [$clientId, $profile['id']]
+            );
+        } catch (Throwable $e) {
+            Response::error('Clients table missing or schema mismatch. Contact Digititan support.', 500);
+        }
+        if (!$row) {
+            Response::error('Client not found', 404);
+        }
+
+        $body = Request::jsonBody();
+        $status = self::normalizeClientStatus($body['status'] ?? $row['status']);
+        Database::queryRun(
+            'UPDATE reseller_clients SET status = ?, updated_at = NOW() WHERE id = ?',
+            [$status, $clientId]
+        );
+        Response::json(Database::queryGet('SELECT * FROM reseller_clients WHERE id = ?', [$clientId]));
+    }
+
+    private static function normalizeClientStatus(mixed $raw): string
+    {
+        $s = strtolower(trim((string) $raw));
+        $map = [
+            'pending' => 'pending',
+            'confirmed' => 'confirmed',
+            'bought' => 'bought',
+            'did_not_buy' => 'did_not_buy',
+            'didnotbuy' => 'did_not_buy',
+            'did-not-buy' => 'did_not_buy',
+        ];
+        if (!isset($map[$s])) {
+            Response::error('Invalid client status', 400);
+        }
+        return $map[$s];
+    }
+
     public static function withdraw(): void
     {
         Auth::authorize('reseller');
@@ -180,8 +475,22 @@ class ResellersController
             $bankDetails = [];
         }
 
-        if ($amount < 100) {
+        if ($amount <= 0) {
+            Response::error('Invalid withdrawal amount', 400);
+        }
+        if ($amount < self::MIN_WITHDRAWAL_ZAR) {
             Response::error('Minimum withdrawal amount is R100', 400);
+        }
+
+        // Production: last calendar day (SA). Office UAT: ALLOW_WITHDRAW_UAT=1 in .env
+        $tz = new DateTimeZone('Africa/Johannesburg');
+        $now = new DateTime('now', $tz);
+        $lastDay = (int) $now->format('t');
+        if ((int) $now->format('j') !== $lastDay && !self::allowWithdrawUat()) {
+            Response::error(
+                'Withdrawals are only allowed on the last calendar day of the month (South Africa).',
+                400
+            );
         }
 
         $profile = Database::queryGet('SELECT * FROM reseller_profiles WHERE user_id = ?', [Auth::$user['id']]);

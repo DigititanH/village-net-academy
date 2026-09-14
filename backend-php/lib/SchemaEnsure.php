@@ -86,6 +86,12 @@ class SchemaEnsure
             if (!self::columnExists($pdo, 'logins', 'reset_token_expires')) {
                 $pdo->exec('ALTER TABLE logins ADD COLUMN reset_token_expires DATETIME DEFAULT NULL');
             }
+            if (!self::columnExists($pdo, 'logins', 'must_change_password')) {
+                $pdo->exec('ALTER TABLE logins ADD COLUMN must_change_password TINYINT(1) NOT NULL DEFAULT 0');
+            }
+            if (!self::columnExists($pdo, 'logins', 'temp_password_expires')) {
+                $pdo->exec('ALTER TABLE logins ADD COLUMN temp_password_expires DATETIME DEFAULT NULL');
+            }
         } catch (Throwable $e) {
             error_log('[SchemaEnsure] logins: ' . $e->getMessage());
         }
@@ -137,6 +143,36 @@ class SchemaEnsure
             }
         } catch (Throwable $e) {
             error_log('[SchemaEnsure] resellerProfiles: ' . $e->getMessage());
+        }
+    }
+
+    /** CRM client list for mobile / reseller portal. */
+    public static function resellerClients(): void
+    {
+        static $done = false;
+        if ($done) {
+            return;
+        }
+        $done = true;
+
+        try {
+            $pdo = Database::connection();
+            $pdo->exec(
+                "CREATE TABLE IF NOT EXISTS reseller_clients (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    reseller_id INT NOT NULL,
+                    name VARCHAR(255) NOT NULL,
+                    email VARCHAR(255) NOT NULL,
+                    product_interest VARCHAR(255) DEFAULT NULL,
+                    status ENUM('pending','confirmed','bought','did_not_buy') NOT NULL DEFAULT 'pending',
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    INDEX idx_reseller_clients_reseller (reseller_id),
+                    INDEX idx_reseller_clients_email (email)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+            );
+        } catch (Throwable $e) {
+            error_log('[SchemaEnsure] resellerClients: ' . $e->getMessage());
         }
     }
 

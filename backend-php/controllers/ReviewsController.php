@@ -38,6 +38,29 @@ class ReviewsController
         Response::json(['message' => 'Review added'], 201);
     }
 
+    public static function update(array $params): void
+    {
+        Auth::authenticate();
+        $body = Request::jsonBody();
+        $rating = (int) ($body['rating'] ?? 0);
+        $comment = $body['comment'] ?? null;
+        if ($rating < 1 || $rating > 5) {
+            Response::error('Rating must be 1-5', 400);
+        }
+        $row = Database::queryGet('SELECT user_id FROM reviews WHERE id = ?', [$params['id']]);
+        if (!$row) {
+            Response::error('Review not found', 404);
+        }
+        if ((int) $row['user_id'] !== (int) Auth::$user['id']) {
+            Response::error('You can only edit your own review', 403);
+        }
+        Database::queryRun(
+            'UPDATE reviews SET rating = ?, comment = ? WHERE id = ?',
+            [$rating, $comment, $params['id']]
+        );
+        Response::json(['message' => 'Review updated']);
+    }
+
     public static function destroy(array $params): void
     {
         Auth::authenticate();

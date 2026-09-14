@@ -10,6 +10,12 @@ class AuthController
         $password = $body['password'] ?? '';
         $role = $body['role'] ?? '';
         $academy = $body['academy'] ?? '';
+        // Mobile sends reseller_kind; website may send affiliation.
+        $resellerKind = strtolower(trim((string) ($body['reseller_kind'] ?? $body['resellerKind'] ?? '')));
+        $affiliation = strtolower(trim((string) ($body['affiliation'] ?? '')));
+        $client = strtolower(trim((string) ($body['client'] ?? '')));
+        $isMobile = $client === 'mobile'
+            || strcasecmp((string) ($_SERVER['HTTP_X_VNA_CLIENT'] ?? ''), 'mobile') === 0;
 
         if (!$name || !$email || !$password) {
             Response::error('Name, email and password are required', 400);
@@ -25,22 +31,38 @@ class AuthController
             Response::error('Email already registered', 409);
         }
 
+        if ($userRole === 'reseller') {
+            if ($resellerKind === '' && $affiliation !== '') {
+                $resellerKind = $affiliation === 'affiliated' ? 'affiliated' : 'independent';
+            }
+            if ($resellerKind === '') {
+                // Website: empty affiliation + centre name ⇒ affiliated.
+                $resellerKind = ($affiliation === '' && trim((string) $academy) !== '')
+                    ? 'affiliated'
+                    : 'independent';
+            }
+            if (!in_array($resellerKind, ['independent', 'affiliated', 'centre'], true)) {
+                $resellerKind = 'independent';
+            }
+        }
+
         $academyName = Commission::normalizeCentreName((string) $academy);
-        $affiliation = strtolower(trim((string) ($body['affiliation'] ?? '')));
 
         if ($userRole === 'academy' && $academyName === '') {
             Response::error('Centre name is required when registering as a centre', 400);
         }
 
         if ($userRole === 'reseller') {
-            // Independent: auto-support Digititan Programme. Affiliated: centre name required.
-            if ($affiliation === 'affiliated' || ($affiliation === '' && $academyName !== '')) {
-                if ($academyName === '') {
-                    Response::error('Please enter the centre name you are affiliated with', 400);
-                }
-            } else {
-                // independent or omitted affiliation with empty centre
+            // Independent: auto-support Digititan Programme. Affiliated/centre: name required.
+            if ($resellerKind === 'independent') {
                 $academyName = Commission::PROGRAMME_CENTRE;
+            } elseif ($academyName === '') {
+                Response::error(
+                    $resellerKind === 'centre'
+                        ? 'Centre / academy organisation name is required'
+                        : 'Please enter the centre name you are affiliated with',
+                    400
+                );
             }
         }
 
@@ -105,31 +127,71 @@ class AuthController
         );
 
         if ($userRole === 'reseller') {
-            $referralCode = 'VNA-' . strtoupper(substr(str_replace('-', '', Request::uuid()), 0, 8));
-            $commissionRate = Commission::RESELLER_RATE;
+            $prefix = $resellerKind === 'centre' ? 'VNA-C-' : 'VNA-B-';
+            $referralCode = $prefix . strtoupper(substr(str_replace('-', '', Request::uuid()), 0, 8));
+            $commissionRate = $resellerKind === 'centre'
+                ? Commission::ACADEMY_RATE
+                : Commission::RESELLER_RATE;
+            $approvalStatusReseller = 'pending';
+            try {
+                Database::queryRun(
+                    "UPDATE registrations SET is_approved = 'pending' WHERE id = ?",
+                    [$userId]
+                );
+            } catch (Throwable $e) {
+                error_log('[register] pending approve flag: ' . $e->getMessage());
+            }
             Database::queryRun(
                 'INSERT INTO reseller_profiles (user_id, referral_code, academy, commission_rate, status) VALUES (?, ?, ?, ?, ?)',
-                [$userId, $referralCode, $academyName, $commissionRate, 'approved']
+                [$userId, $referralCode, $academyName, $commissionRate, $approvalStatusReseller]
             );
-            $affiliationLabel = Commission::isProgrammeCentre($academyName)
-                ? 'Independent (Digititan Programme)'
-                : 'Affiliated centre';
+            $kindLabel = match ($resellerKind) {
+                'centre' => 'Centre (VNA-C · 26%)',
+                'affiliated' => 'Affiliated with a centre (VNA-B · 53/26/21)',
+                default => 'Independent — Digititan Programme (VNA-B · 53%)',
+            };
             try {
-                Mailer::send([
-                    'to' => Site::email(),
-                    'replyTo' => $email,
-                    'subject' => "New reseller registration: $name",
-                    'html' => "<p><strong>Name:</strong> " . htmlspecialchars($name) . "</p>
-                    <p><strong>Email:</strong> " . htmlspecialchars($email) . "</p>
-                    <p><strong>Affiliation:</strong> " . htmlspecialchars($affiliationLabel) . "</p>
-                    <p><strong>Centre:</strong> " . htmlspecialchars($academyName) . "</p>
-                    <p><strong>Reseller commission:</strong> " . number_format($commissionRate, 0) . "%</p>
-                    <p><strong>Centre share:</strong> " . number_format(Commission::ACADEMY_RATE, 0) . "%</p>
-                    <p><strong>Referral code:</strong> $referralCode</p>",
-                ]);
+                if (class_exists('AdminNotify') && method_exists('AdminNotify', 'resellerApplied')) {
+                    AdminNotify::resellerApplied(
+                        (string) $name,
+                        (string) $email,
+                        $kindLabel,
+                        $academyName,
+                        $referralCode,
+                        $commissionRate
+                    );
+                } else {
+                    Mailer::send([
+                        'to' => Site::email(),
+                        'replyTo' => $email,
+                        'subject' => "New reseller registration: $name",
+                        'html' => "<p><strong>Name:</strong> " . htmlspecialchars($name) . "</p>
+                        <p><strong>Email:</strong> " . htmlspecialchars($email) . "</p>
+                        <p><strong>Affiliation:</strong> " . htmlspecialchars($kindLabel) . "</p>
+                        <p><strong>Centre:</strong> " . htmlspecialchars($academyName) . "</p>
+                        <p><strong>Reseller commission:</strong> " . number_format($commissionRate, 0) . "%</p>
+                        <p><strong>Centre share:</strong> " . number_format(Commission::ACADEMY_RATE, 0) . "%</p>
+                        <p><strong>Referral code:</strong> $referralCode</p>",
+                    ]);
+                }
             } catch (Throwable $e) {
                 error_log('[register] reseller notify mail: ' . $e->getMessage());
             }
+
+            // App shows the pending screen when JWT is not issued yet.
+            Response::json([
+                'pending' => true,
+                'message' => 'Reseller account created. An admin must approve it before you can sign in.',
+                'user' => [
+                    'id' => (int) $userId,
+                    'name' => $name,
+                    'email' => strtolower(trim((string) $email)),
+                    'role' => 'reseller',
+                    'academy_name' => $academyName,
+                    'is_approved' => 'pending',
+                    'is_verified' => false,
+                ],
+            ], 201);
         }
 
         if ($userRole === 'academy') {
@@ -146,6 +208,45 @@ class AuthController
             } catch (Throwable $e) {
                 error_log('[register] academy notify mail: ' . $e->getMessage());
             }
+        }
+
+        // Mobile app: skip email-link gate and issue JWT (SMTP often unset on shared host).
+        // Website register still requires confirmation link.
+        if ($isMobile && $userRole !== 'reseller') {
+            try {
+                Database::queryRun(
+                    'UPDATE registrations SET is_verified = 1, verification_token = NULL, verification_token_expires = NULL WHERE id = ?',
+                    [$userId]
+                );
+            } catch (Throwable $e) {
+                try {
+                    Database::queryRun(
+                        'UPDATE registrations SET is_verified = 1, verification_token = NULL WHERE id = ?',
+                        [$userId]
+                    );
+                } catch (Throwable $e2) {
+                    Database::queryRun(
+                        'UPDATE registrations SET is_verified = 1 WHERE id = ?',
+                        [$userId]
+                    );
+                }
+            }
+
+            Response::json([
+                'token' => Jwt::sign((int) $userId),
+                'pending_verification' => false,
+                'email_sent' => false,
+                'message' => 'Account created. You are signed in.',
+                'user' => [
+                    'id' => (int) $userId,
+                    'name' => $name,
+                    'email' => strtolower(trim((string) $email)),
+                    'role' => $userRole,
+                    'academy_name' => $userRole === 'academy' ? $academyName : null,
+                    'is_approved' => $approvalStatus,
+                    'is_verified' => true,
+                ],
+            ], 201);
         }
 
         if ($verificationToken) {
@@ -203,17 +304,34 @@ class AuthController
         }
 
         if (($user['is_approved'] ?? '') === 'pending') {
+            // Resellers stay pending until Ops Admin approves (meeting model).
+            if (($user['role'] ?? '') === 'reseller') {
+                Response::json([
+                    'message' => 'Your reseller account is awaiting admin approval. You will be able to sign in once Digititan / Ops approves it.',
+                    'pending' => true,
+                    'email' => $email,
+                ], 403);
+            }
             Database::queryRun("UPDATE registrations SET is_approved = 'approved' WHERE id = ?", [$user['id']]);
             $user['is_approved'] = 'approved';
-            if (($user['role'] ?? '') === 'reseller') {
-                Database::queryRun(
-                    "UPDATE reseller_profiles SET status = 'approved' WHERE user_id = ? AND status = 'pending'",
-                    [$user['id']]
-                );
+        }
+
+        $mustChange = false;
+        if (class_exists('AccountSecurity')) {
+            $flags = AccountSecurity::loginFlags((int) $user['id']);
+            $mustChange = (bool) $flags['must_change_password'];
+            $exp = $flags['temp_password_expires'] ?? null;
+            if ($mustChange && $exp && strtotime((string) $exp) < time()) {
+                Response::error('Temporary password expired. Ask an admin to send a new invite.', 403);
             }
         }
 
-        if (($user['role'] ?? '') !== 'admin' && ($user['role'] ?? '') !== 'super_admin' && empty($user['is_verified'])) {
+        if (
+            !$mustChange
+            && ($user['role'] ?? '') !== 'admin'
+            && ($user['role'] ?? '') !== 'super_admin'
+            && empty($user['is_verified'])
+        ) {
             Response::json([
                 'message' => 'Please confirm your email before signing in. Check your inbox, or request a new confirmation link.',
                 'needs_verification' => true,
@@ -227,8 +345,16 @@ class AuthController
             // Non-fatal if last_login_at column is missing on older DBs
         }
 
+        if (class_exists('AccountSecurity')) {
+            $when = method_exists('AccountSecurity', 'formatSast')
+                ? AccountSecurity::formatSast()
+                : (date('Y-m-d H:i') . ' SAST');
+            AccountSecurity::loginAlert((int) $user['id'], (string) $user['name'], (string) $user['email'], $when);
+        }
+
         Response::json([
             'token' => Jwt::sign((int) $user['id']),
+            'must_change_password' => $mustChange,
             'user' => [
                 'id' => (int) $user['id'],
                 'name' => $user['name'],
@@ -238,8 +364,54 @@ class AuthController
                 'is_approved' => $user['is_approved'],
                 'is_verified' => (bool) $user['is_verified'],
                 'academy_name' => $user['academy_name'] ?? null,
+                'must_change_password' => $mustChange,
             ],
         ]);
+    }
+
+    public static function changePassword(): void
+    {
+        Auth::authenticate();
+        $body = Request::jsonBody();
+        $current = (string) ($body['current_password'] ?? '');
+        $new = (string) ($body['new_password'] ?? $body['password'] ?? '');
+        if (strlen($new) < 8) {
+            Response::error('New password must be at least 8 characters', 400);
+        }
+
+        $userId = (int) Auth::$user['id'];
+        $login = Database::queryGet(
+            'SELECT password FROM logins WHERE registration_id = ?',
+            [$userId]
+        );
+        if (!$login) {
+            Response::error('Account not found', 404);
+        }
+
+        $must = false;
+        if (class_exists('AccountSecurity')) {
+            $flags = AccountSecurity::loginFlags($userId);
+            $must = (bool) $flags['must_change_password'];
+        }
+        if (!$must) {
+            if ($current === '' || !password_verify($current, (string) $login['password'])) {
+                Response::error('Current password is incorrect', 400);
+            }
+        }
+
+        $hash = password_hash($new, PASSWORD_BCRYPT, ['cost' => 12]);
+        try {
+            Database::queryRun(
+                'UPDATE logins SET password = ?, must_change_password = 0, temp_password_expires = NULL WHERE registration_id = ?',
+                [$hash, $userId]
+            );
+        } catch (Throwable $e) {
+            Database::queryRun(
+                'UPDATE logins SET password = ? WHERE registration_id = ?',
+                [$hash, $userId]
+            );
+        }
+        Response::json(['message' => 'Password updated']);
     }
 
     public static function verifyEmail(): void
