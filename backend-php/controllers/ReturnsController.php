@@ -58,6 +58,26 @@ class ReturnsController
             'info'
         );
 
+        $customerName = trim((string) (Auth::$user['name'] ?? ''));
+        $customerEmail = strtolower(trim((string) (Auth::$user['email'] ?? '')));
+        $orderTotal = (float) ($order['total'] ?? 0);
+        try {
+            if (class_exists('AdminNotify') && method_exists('AdminNotify', 'returnRequested')) {
+                AdminNotify::returnRequested($orderId, $customerName, $customerEmail, $reason, $orderTotal);
+            } else {
+                Mailer::send([
+                    'to' => Site::email(),
+                    'replyTo' => $customerEmail !== '' ? $customerEmail : null,
+                    'subject' => 'Return request — order #' . $orderId,
+                    'html' => '<p>Return logged for order <strong>#' . $orderId . '</strong>.</p>'
+                        . '<p><strong>Customer:</strong> ' . htmlspecialchars($customerName) . ' (' . htmlspecialchars($customerEmail) . ')</p>'
+                        . '<p><strong>Reason:</strong> ' . nl2br(htmlspecialchars($reason)) . '</p>',
+                ]);
+            }
+        } catch (Throwable $e) {
+            error_log('[ReturnsController] admin notify: ' . $e->getMessage());
+        }
+
         $fresh = OrderAfterDelivery::loadOrder($orderId);
         Response::json(OrderAfterDelivery::withItems($fresh), 201);
     }

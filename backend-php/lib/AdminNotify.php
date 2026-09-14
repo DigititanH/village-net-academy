@@ -66,4 +66,36 @@ class AdminNotify
             }
         }
     }
+
+    public static function returnRequested(
+        int $orderId,
+        string $customerName,
+        string $customerEmail,
+        string $reason,
+        float $orderTotal = 0.0
+    ): void {
+        $safeName = htmlspecialchars($customerName !== '' ? $customerName : 'Customer');
+        $safeEmail = htmlspecialchars($customerEmail);
+        $safeReason = nl2br(htmlspecialchars($reason));
+        $totalLabel = $orderTotal > 0 ? 'R' . number_format($orderTotal, 2) : '—';
+        $html = '<p>A customer logged a <strong>return request</strong> in Village NetAcad.</p>'
+            . '<p><strong>Order:</strong> #' . (int) $orderId . '</p>'
+            . '<p><strong>Customer:</strong> ' . $safeName . ' (' . $safeEmail . ')</p>'
+            . '<p><strong>Order total:</strong> ' . htmlspecialchars($totalLabel) . '</p>'
+            . '<p><strong>Reason:</strong></p><p>' . $safeReason . '</p>'
+            . '<p>Open Admin → Returns to approve or reject.</p>';
+
+        foreach (self::emails() as $to) {
+            try {
+                Mailer::send([
+                    'to' => $to,
+                    'replyTo' => $customerEmail !== '' ? $customerEmail : null,
+                    'subject' => 'Return request — order #' . (int) $orderId,
+                    'html' => $html,
+                ]);
+            } catch (Throwable $e) {
+                error_log('[AdminNotify] return skip ' . $to . ': ' . $e->getMessage());
+            }
+        }
+    }
 }
