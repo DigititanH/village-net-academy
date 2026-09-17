@@ -73,14 +73,17 @@ class OrdersController
 
         foreach ($items as $item) {
             $product = Database::queryGet(
-                'SELECT id, price, stock, name FROM products WHERE id = ? AND is_active = 1',
+                'SELECT id, price, stock, name, color_stock FROM products WHERE id = ? AND is_active = 1',
                 [$item['product_id']]
             );
             if (!$product) {
                 Response::error('Product ' . ($item['product_id'] ?? '') . ' not found', 400);
             }
-            if ((int) $product['stock'] < (int) $item['quantity']) {
-                Response::error($product['name'] . ' is out of stock', 400);
+            $colorMap = ColorStock::decode($product['color_stock'] ?? null);
+            $available = ColorStock::available($colorMap, $item['color'] ?? null, (int) $product['stock']);
+            if ($available < (int) $item['quantity']) {
+                $label = !empty($item['color']) ? ($product['name'] . ' (' . $item['color'] . ')') : $product['name'];
+                Response::error($label . ' is out of stock', 400);
             }
             $lineTotal = (float) $product['price'] * (int) $item['quantity'];
             $subtotal += $lineTotal;

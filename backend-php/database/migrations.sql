@@ -33,6 +33,7 @@ ALTER TABLE hero_slides ADD COLUMN body_color VARCHAR(20) NOT NULL DEFAULT '#E5E
 
 -- Electronics / merchandise product types
 ALTER TABLE products ADD COLUMN subcategory VARCHAR(80) DEFAULT NULL;
+ALTER TABLE products ADD COLUMN color_stock TEXT DEFAULT NULL;
 
 -- Academy affiliate accounts
 ALTER TABLE registrations MODIFY role ENUM('admin','super_admin','reseller','customer','academy') DEFAULT 'customer';

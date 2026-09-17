@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Search, ShoppingCart, Star, Shirt, Cpu } from "lucide-react";
 import api from "../lib/api";
-import { parseProductOptions } from "../lib/productOptions";
+import { parseProductOptions, stockForColor, colorSwatchHex, parseColorStock } from "../lib/productOptions";
 import { useCart } from "../context/CartContext";
 import toast from "react-hot-toast";
 import PageHero from "../components/PageHero";
@@ -37,6 +37,7 @@ export default function Shop() {
   const [sort, setSort] = useState("newest");
   const [loading, setLoading] = useState(true);
   const [selectedSizes, setSelectedSizes] = useState({});
+  const [selectedColors, setSelectedColors] = useState({});
   const { addToCart } = useCart();
 
   useEffect(() => {
@@ -49,7 +50,7 @@ export default function Shop() {
   useEffect(() => {
     const load = async () => {
       try {
-        const params = { search, category, sort };
+        const params = { search, category, sort, limit: 200 };
         if ((category === "electronics" || category === "merchandise") && subcategory) {
           params.subcategory = subcategory;
         }
@@ -59,7 +60,10 @@ export default function Shop() {
         ]);
         setProducts(Array.isArray(prodRes.data?.products) ? prodRes.data.products : []);
         setCategories(Array.isArray(catRes.data) ? catRes.data : []);
-      } catch { /* empty */ }
+      } catch {
+        toast.error("Could not load products. Please try again.");
+        setProducts([]);
+      }
       setLoading(false);
     };
     load();
@@ -93,15 +97,44 @@ export default function Shop() {
     return parseProductOptions(p.sizes);
   };
 
+  const getColors = (p) => {
+    const fromColors = parseProductOptions(p.colors);
+    const fromStock = parseColorStock(p.color_stock, null).map((r) => r.name);
+    const seen = new Set();
+    const merged = [];
+    [...fromColors, ...fromStock].forEach((name) => {
+      const key = String(name).trim().toLowerCase();
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      merged.push(String(name).trim());
+    });
+    return merged;
+  };
+
   const handleAddToCart = async (e, product) => {
     e.preventDefault();
     const sizes = getSizes(product);
+    const colors = getColors(product);
     if (sizes.length > 0 && !selectedSizes[product.id]) {
       toast.error("Please select a size first");
       return;
     }
+    if (colors.length > 0 && !selectedColors[product.id]) {
+      toast.error("Please select a colour");
+      return;
+    }
+    const chosenColor = selectedColors[product.id];
+    if (colors.length > 0 && stockForColor(product, chosenColor) < 1) {
+      toast.error("That colour is out of stock");
+      return;
+    }
     try {
-      await addToCart(product.id, 1, selectedSizes[product.id] || undefined);
+      await addToCart(
+        product.id,
+        1,
+        selectedSizes[product.id] || undefined,
+        chosenColor || undefined
+      );
       toast.success("Added to cart!");
     } catch {
       toast.error("Please login to add to cart");
@@ -231,60 +264,116 @@ export default function Shop() {
               <p className="text-sm text-gray-600 mt-2">Admins can add Merchandise and Electronics products from the Products panel.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4 items-stretch">
               {products.map((p) => (
-                <Link to={`/shop/${p.slug}`} key={p.id} className="group glass rounded-[2rem] overflow-hidden hover:border-burnt-500/35 transition-all duration-700 hover:-translate-y-3">
-                  <div className="aspect-square glass-clear overflow-hidden border-0 shadow-none">
+                <Link
+                  to={`/shop/${p.slug}`}
+                  key={p.id}
+                  className="group glass rounded-2xl overflow-hidden hover:border-burnt-500/35 transition-all duration-500 hover:-translate-y-1 h-full flex flex-col text-left"
+                >
+                  <div className="aspect-[4/3] glass-clear overflow-hidden border-0 shadow-none flex-shrink-0">
                     {p.image ? (
-                      <img src={p.image} alt={p.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                      <img src={p.image} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-gray-600">
-                        <ShoppingCart size={48} />
+                        <ShoppingCart size={28} />
                       </div>
                     )}
                   </div>
-                  <div className="p-5">
-                    <p className="text-xs text-burnt-600 font-semibold mb-1 uppercase tracking-wider">
+                  <div className="p-3 flex flex-col flex-1 min-h-0">
+                    <p className="text-[10px] text-burnt-600 font-semibold mb-0.5 uppercase tracking-wider truncate">
                       {p.category_name || "General"}
                       {p.subcategory ? ` · ${productTypeLabel(p.subcategory)}` : ""}
                     </p>
-                    <h3 className="font-bold text-lg mb-1 line-clamp-1">{p.name}</h3>
-                    <div className="flex items-center gap-1 mb-3">
-                      <Star size={14} className="fill-yellow-400 text-yellow-400" />
-                      <span className="text-xs text-gray-500">{p.avg_rating || "0"} ({p.review_count || 0})</span>
+                    <h3 className="font-bold text-sm mb-1 line-clamp-2 min-h-[2.5rem] leading-snug">{p.name}</h3>
+                    <div className="flex items-center gap-1 mb-1.5">
+                      <Star size={12} className="fill-yellow-400 text-yellow-400 flex-shrink-0" />
+                      <span className="text-[10px] text-gray-500">{p.avg_rating || "0"} ({p.review_count || 0})</span>
                     </div>
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <span className="font-black text-xl text-burnt-600">R{Number(p.price).toFixed(2)}</span>
-                        {p.compare_price && <span className="text-sm text-gray-500 line-through">R{Number(p.compare_price).toFixed(2)}</span>}
+                    <div className="flex items-center gap-1.5 mb-2 min-h-[1.5rem]">
+                      <span className="font-black text-base text-burnt-600">R{Number(p.price).toFixed(2)}</span>
+                      {p.compare_price ? (
+                        <span className="text-xs text-gray-500 line-through">R{Number(p.compare_price).toFixed(2)}</span>
+                      ) : null}
+                    </div>
+
+                    <div className="flex-1 flex flex-col gap-2 mb-2">
+                      <div className="min-h-[3.25rem]">
+                        {getSizes(p).length > 0 ? (
+                          <>
+                            <p className="text-[10px] text-gray-500 mb-1 font-medium">Sizes</p>
+                            <div className="flex flex-wrap gap-1 content-start">
+                              {getSizes(p).map((s) => (
+                                <button
+                                  key={s}
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    setSelectedSizes((prev) => ({ ...prev, [p.id]: s }));
+                                  }}
+                                  className={`min-w-[1.75rem] px-1.5 py-0.5 rounded-md border text-[10px] font-bold transition-all ${
+                                    selectedSizes[p.id] === s
+                                      ? "bg-gradient-to-r from-burnt-400 to-primary-400 border-transparent text-white"
+                                      : "border-white/20 bg-white/5 hover:border-burnt-600/35"
+                                  }`}
+                                >
+                                  {s}
+                                </button>
+                              ))}
+                            </div>
+                          </>
+                        ) : null}
+                      </div>
+                      <div className="min-h-[3.75rem]">
+                        {getColors(p).length > 0 ? (
+                          <>
+                            <p className="text-[10px] text-gray-500 mb-1.5 font-medium">Colours</p>
+                            <div className="flex flex-wrap gap-1.5 content-start">
+                              {getColors(p).map((c) => {
+                                const cStock = stockForColor(p, c);
+                                const swatch = colorSwatchHex(c);
+                                const isLight = ["white", "cream", "beige", "yellow", "silver"].some((n) =>
+                                  String(c).trim().toLowerCase().includes(n)
+                                );
+                                return (
+                                  <button
+                                    key={c}
+                                    type="button"
+                                    disabled={cStock < 1}
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      setSelectedColors((prev) => ({ ...prev, [p.id]: c }));
+                                    }}
+                                    className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs font-bold transition-all disabled:opacity-40 ${
+                                      selectedColors[p.id] === c
+                                        ? "bg-gradient-to-r from-burnt-400 to-primary-400 border-transparent text-white"
+                                        : "border-white/20 bg-white/5 hover:border-burnt-600/35"
+                                    }`}
+                                    title={cStock < 1 ? `${c} — out of stock` : c}
+                                  >
+                                    <span
+                                      className={`inline-block w-5 h-5 rounded-full flex-shrink-0 border-2 ${
+                                        isLight ? "border-gray-400" : "border-white/40"
+                                      } ${cStock < 1 ? "opacity-50" : ""}`}
+                                      style={{ backgroundColor: swatch }}
+                                      aria-hidden
+                                    />
+                                    <span>{c}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </>
+                        ) : null}
                       </div>
                     </div>
-                    {getSizes(p).length > 0 && (
-                      <div className="mb-3">
-                        <p className="text-xs text-gray-500 mb-1.5 font-medium">Sizes</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {getSizes(p).map((s) => (
-                            <button
-                              key={s}
-                              type="button"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                setSelectedSizes((prev) => ({ ...prev, [p.id]: s }));
-                              }}
-                              className={`min-w-[2.25rem] px-2.5 py-1 rounded-lg border text-xs font-bold transition-all ${
-                                selectedSizes[p.id] === s
-                                  ? "bg-gradient-to-r from-burnt-400 to-primary-400 border-transparent text-white shadow-[0_0_12px_rgba(14,165,233,0.25)]"
-                                  : "border-white/20 bg-white/5 hover:border-burnt-600/35"
-                              }`}
-                            >
-                              {s}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    <button onClick={(e) => handleAddToCart(e, p)} className="w-full py-2.5 rounded-xl bg-gradient-to-r from-burnt-400 to-primary-400 font-bold text-sm hover:scale-105 transition-all duration-300 shadow-[0_0_15px_rgba(14,165,233,0.28)] flex items-center justify-center gap-2">
-                      <ShoppingCart size={15} /> Add to Cart
+
+                    <button
+                      type="button"
+                      onClick={(e) => handleAddToCart(e, p)}
+                      className="mt-auto w-full py-1.5 rounded-lg bg-gradient-to-r from-burnt-400 to-primary-400 font-bold text-xs hover:scale-[1.02] transition-all duration-300 shadow-[0_0_12px_rgba(14,165,233,0.22)] flex items-center justify-center gap-1.5"
+                    >
+                      <ShoppingCart size={13} /> Add to Cart
                     </button>
                   </div>
                 </Link>

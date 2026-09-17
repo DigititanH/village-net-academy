@@ -34,8 +34,12 @@ class Paths
 
     private static function resolvePath(string $path): string
     {
-        if (preg_match('#^[a-zA-Z]:\\\\#', $path) || str_starts_with($path, '/')) {
-            return $path;
+        // Absolute: Unix (/...), Windows (C:\... or C:/...)
+        if (
+            str_starts_with($path, '/')
+            || preg_match('#^[a-zA-Z]:[\\\\/]#', $path) === 1
+        ) {
+            return str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $path);
         }
         return self::backendRoot() . DIRECTORY_SEPARATOR . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $path);
     }

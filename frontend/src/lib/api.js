@@ -56,9 +56,27 @@ api.interceptors.response.use(
   (res) => res,
   (err) => {
     if (err.response?.status === 401) {
+      const path = window.location.pathname || "";
+      const isPublic =
+        path === "/" ||
+        path === "/login" ||
+        path === "/register" ||
+        path.startsWith("/shop") ||
+        path.startsWith("/about") ||
+        path.startsWith("/courses") ||
+        path.startsWith("/contact") ||
+        path.startsWith("/training") ||
+        path.startsWith("/donation") ||
+        path.startsWith("/career") ||
+        path.startsWith("/verify") ||
+        path.startsWith("/forgot") ||
+        path.startsWith("/reset");
       localStorage.removeItem("token");
       localStorage.removeItem("user");
-      if (window.location.pathname !== "/login") window.location.href = "/login";
+      // Only force login redirect on protected areas (dashboards / checkout / cart)
+      if (!isPublic && !path.startsWith("/login")) {
+        window.location.href = "/login";
+      }
     }
     return Promise.reject(err);
   }

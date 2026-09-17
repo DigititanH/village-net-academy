@@ -49,6 +49,12 @@ ALTER TABLE hero_slides ADD COLUMN body_color VARCHAR(20) NOT NULL DEFAULT '#E5E
 ALTER TABLE hero_buttons ADD COLUMN slide_id INT NULL;
 
 ALTER TABLE products ADD COLUMN subcategory VARCHAR(80) DEFAULT NULL;
+ALTER TABLE products ADD COLUMN color_stock TEXT DEFAULT NULL;
+
+ALTER TABLE cart ADD COLUMN size VARCHAR(50) DEFAULT NULL;
+ALTER TABLE cart ADD COLUMN color VARCHAR(50) DEFAULT NULL;
+ALTER TABLE order_items ADD COLUMN size VARCHAR(50) DEFAULT NULL;
+ALTER TABLE order_items ADD COLUMN color VARCHAR(50) DEFAULT NULL;
 
 -- Store categories (required for Add Product department dropdown)
 INSERT IGNORE INTO categories (name, slug) VALUES ('Merchandise', 'merchandise');

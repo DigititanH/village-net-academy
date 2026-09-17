@@ -3,6 +3,7 @@ import { Plus, Pencil, Trash2, X, Check } from "lucide-react";
 import api from "../../lib/api";
 import toast from "react-hot-toast";
 import { productTypeLabel, typesForDepartment } from "../../lib/productTypes";
+import { parseColorStock, parseProductOptions } from "../../lib/productOptions";
 
 const emptyForm = {
   name: "",
@@ -14,18 +15,38 @@ const emptyForm = {
   stock: "0",
   sizes: "",
   colors: "",
+  color_stock: "",
   is_active: "1",
 };
 
 const DEPARTMENT_SLUGS = ["merchandise", "electronics"];
 
 function appendFormData(fd, form) {
-  const skipIfEmpty = new Set(["compare_price", "category_id", "subcategory", "sizes"]);
+  const skipIfEmpty = new Set(["compare_price", "category_id", "subcategory", "sizes", "colors", "color_stock"]);
   Object.entries(form).forEach(([k, v]) => {
     if (v === null || v === undefined) return;
     if (skipIfEmpty.has(k) && v === "") return;
     fd.append(k, String(v));
   });
+}
+
+function colorRowsToPayload(rows) {
+  const cleaned = rows
+    .map((r) => ({ name: String(r.name || "").trim(), stock: Math.max(0, parseInt(r.stock, 10) || 0) }))
+    .filter((r) => r.name);
+  if (!cleaned.length) {
+    return { colors: "", color_stock: "", stock: null };
+  }
+  const map = {};
+  cleaned.forEach((r) => {
+    map[r.name] = (map[r.name] || 0) + r.stock;
+  });
+  const total = Object.values(map).reduce((s, n) => s + n, 0);
+  return {
+    colors: JSON.stringify(Object.keys(map)),
+    color_stock: JSON.stringify(map),
+    stock: String(total),
+  };
 }
 
 export default function AdminProducts() {
@@ -35,6 +56,7 @@ export default function AdminProducts() {
   const [editing, setEditing] = useState(null);
   const ALL_SIZES = ["XS", "S", "M", "L", "XL", "XXL"];
   const [form, setForm] = useState(emptyForm);
+  const [colorRows, setColorRows] = useState([{ name: "", stock: "0" }]);
   const [image, setImage] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -95,6 +117,10 @@ export default function AdminProducts() {
   }, []);
 
   const saveStock = async (product) => {
+    if (product.color_stock) {
+      toast.error("This product has colour stock — open Edit to update per-colour quantities");
+      return;
+    }
     const raw = stockDrafts[product.id];
     const next = Math.max(0, parseInt(String(raw ?? "0"), 10) || 0);
     if (next === Number(product.stock)) {
@@ -117,12 +143,28 @@ export default function AdminProducts() {
   const openNew = () => {
     setEditing(null);
     setForm(emptyForm);
+    setColorRows([{ name: "", stock: "0" }]);
     setImage(null);
     setShowModal(true);
   };
 
   const openEdit = (p) => {
     setEditing(p);
+    let rows = parseColorStock(p.color_stock, null);
+    if (!rows.length) {
+      const names = parseProductOptions(p.colors);
+      if (names.length) {
+        const total = Math.max(0, parseInt(p.stock, 10) || 0);
+        const each = Math.floor(total / names.length);
+        let remainder = total - each * names.length;
+        rows = names.map((name) => {
+          const extra = remainder > 0 ? 1 : 0;
+          if (remainder > 0) remainder -= 1;
+          return { name, stock: String(each + extra) };
+        });
+      }
+    }
+    setColorRows(rows.length ? rows : [{ name: "", stock: "0" }]);
     setForm({
       name: p.name || "",
       description: p.description || "",
@@ -133,6 +175,7 @@ export default function AdminProducts() {
       stock: String(p.stock ?? 0),
       sizes: p.sizes || "",
       colors: p.colors || "",
+      color_stock: p.color_stock || "",
       is_active: String(p.is_active ?? 1),
     });
     setImage(null);
@@ -166,15 +209,29 @@ export default function AdminProducts() {
       return;
     }
 
+    const colorPayload = colorRowsToPayload(colorRows);
+    const hasColors = colorRows.some((r) => String(r.name || "").trim());
+    if (hasColors && !colorPayload.color_stock) {
+      toast.error("Add at least one colour with a name");
+      return;
+    }
+
     const payload = {
       ...form,
       subcategory: form.subcategory || "",
       sizes: showSizes ? form.sizes : "",
+      colors: colorPayload.colors,
+      color_stock: colorPayload.color_stock,
+      stock: hasColors ? colorPayload.stock : form.stock,
     };
 
     const fd = new FormData();
     appendFormData(fd, payload);
     if (!payload.subcategory) fd.append("subcategory", "");
+    if (!hasColors) {
+      fd.append("colors", "");
+      fd.append("color_stock", "");
+    }
     if (image) fd.append("image", image);
 
     setSaving(true);
@@ -420,18 +477,31 @@ export default function AdminProducts() {
               )}
 
               <div>
-                <label className="block text-sm font-medium mb-2">Stock quantity</label>
+                <label className="block text-sm font-medium mb-2">
+                  {colorRows.some((r) => String(r.name || "").trim()) ? "Total stock (from colours)" : "Stock quantity"}
+                </label>
                 <input
                   type="number"
                   min="0"
                   step="1"
                   required
                   placeholder="0"
-                  value={form.stock}
+                  value={
+                    colorRows.some((r) => String(r.name || "").trim())
+                      ? String(
+                          colorRows.reduce((sum, r) => sum + (Math.max(0, parseInt(r.stock, 10) || 0)), 0)
+                        )
+                      : form.stock
+                  }
                   onChange={(e) => setForm({ ...form, stock: e.target.value })}
-                  className="input-field"
+                  disabled={colorRows.some((r) => String(r.name || "").trim())}
+                  className="input-field disabled:opacity-60"
                 />
-                <p className="text-xs text-gray-500 mt-1">How many units are available in the shop.</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {colorRows.some((r) => String(r.name || "").trim())
+                    ? "Total updates automatically from colour stock below."
+                    : "How many units are available when this product has no colour variants."}
+                </p>
               </div>
               {showSizes && (
                 <div>
@@ -472,12 +542,61 @@ export default function AdminProducts() {
                   </div>
                 </div>
               )}
-              <input
-                placeholder='Colors: Black, White (or JSON ["Black","White"])'
-                value={form.colors}
-                onChange={(e) => setForm({ ...form, colors: e.target.value })}
-                className="input-field"
-              />
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <label className="block text-sm font-medium">Colours & stock</label>
+                  <button
+                    type="button"
+                    className="text-xs text-burnt-500 hover:underline"
+                    onClick={() => setColorRows((prev) => [...prev, { name: "", stock: "0" }])}
+                  >
+                    + Add colour
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {colorRows.map((row, idx) => (
+                    <div key={idx} className="flex gap-2 items-center">
+                      <input
+                        placeholder="Colour name (e.g. Black)"
+                        value={row.name}
+                        onChange={(e) => {
+                          const next = [...colorRows];
+                          next[idx] = { ...next[idx], name: e.target.value };
+                          setColorRows(next);
+                        }}
+                        className="input-field flex-1"
+                      />
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        placeholder="Qty"
+                        value={row.stock}
+                        onChange={(e) => {
+                          const next = [...colorRows];
+                          next[idx] = { ...next[idx], stock: e.target.value };
+                          setColorRows(next);
+                        }}
+                        className="input-field w-24"
+                        title="Stock for this colour"
+                      />
+                      <button
+                        type="button"
+                        className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg"
+                        onClick={() => {
+                          setColorRows((prev) => (prev.length <= 1 ? [{ name: "", stock: "0" }] : prev.filter((_, i) => i !== idx)));
+                        }}
+                        title="Remove colour"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Shoppers pick a colour and only that colour’s stock is used. Leave blank if the product has no colour options.
+                </p>
+              </div>
               {editing?.image && !image && (
                 <div className="flex items-center gap-3">
                   <img src={editing.image} alt="" className="w-16 h-16 rounded-lg object-cover" />

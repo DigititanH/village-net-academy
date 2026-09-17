@@ -9,7 +9,7 @@ const teamMembers = [
   { name: "Cincinnatia Rathete", position: "Projects & Training Manager", image: "/IMG_7506.jpg" },
   { name: "Ditebogo Monareng", position: "Information Technology (IT) Manager", image: "/IMG_7517.jpg" },
   { name: "Gofaone Grand", position: "Marketing & Strategic Partnerships Manager", image: "/IMG_7556.jpg" },
-  { name: "Nelisiwe Msiza", position: "Quality Manager", image: "/IMG_7550.jpg" },
+  { name: "Nelisiwe Msiza", position: "Quality Assurance Manager", image: "/IMG_7550.jpg" },
 ];
 
 export default function About() {

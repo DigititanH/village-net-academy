@@ -11,7 +11,7 @@ const highlights = [
   {
     icon: GraduationCap,
     title: "Industry-aligned learning",
-    desc: "Networking, cybersecurity, programming, and ICT fundamentals through Cisco NetAcad.",
+    desc: "Networking, Cybersecurity, Programming, and ICT fundamentals through Cisco NetAcad.",
   },
   {
     icon: Users,
@@ -20,7 +20,7 @@ const highlights = [
   },
   {
     icon: Building2,
-    title: "ASC partner support",
+    title: "Centres partner support",
     desc: "Onboarding, facilitator enablement, and learner pathways toward certification.",
   },
 ];
@@ -61,12 +61,12 @@ export default function TrainingAcademy() {
     <div>
       <PageHero
         image={pageHeroImages.trainingAcademy}
-        alt="Academy Support Centers across South Africa"
+        alt="Digititan Centres across South Africa"
         eyebrow="Training Academy"
-        title="Digititan ASC network"
+        title="Digititan Centres network"
         titleBrand
         compact
-        subtitle="Select a province on the map to see Academy Support Centers across South Africa."
+        subtitle="Select a province on the map to see Digititan Centres across South Africa."
       />
 
       {/* Map first — primary view after the page header */}
@@ -82,10 +82,10 @@ export default function TrainingAcademy() {
             About the Training Academy
           </h2>
           <p className="text-gray-400 text-lg leading-relaxed">
-            <span className="text-burnt-400 font-semibold">Village NetAcad Training Academy</span> connects
-            communities to Cisco Networking Academy (NetAcad) — a global platform for practical, self-paced{" "}
+            <span className="text-burnt-400 font-semibold">Village NetAcad Training Academy</span>{" "}
+            connects communities to Cisco Networking Academy (NetAcad) — a global platform for practical, self-paced{" "}
             <span className="text-burnt-400 font-medium">digital skills</span>. Partners run local training centres
-            that help learners build networking, cybersecurity, and ICT skills toward{" "}
+            that help learners develop Networking, Cybersecurity, and ICT skills that support{" "}
             <span className="text-burnt-400 font-medium">certification</span> and work-ready outcomes.
           </p>
 

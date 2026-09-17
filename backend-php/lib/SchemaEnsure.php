@@ -205,6 +205,9 @@ class SchemaEnsure
             if (!self::columnExists($pdo, 'products', 'subcategory')) {
                 $pdo->exec('ALTER TABLE products ADD COLUMN subcategory VARCHAR(80) DEFAULT NULL');
             }
+            if (!self::columnExists($pdo, 'products', 'color_stock')) {
+                $pdo->exec('ALTER TABLE products ADD COLUMN color_stock TEXT DEFAULT NULL');
+            }
             $pdo->exec("INSERT IGNORE INTO categories (name, slug) VALUES ('Merchandise', 'merchandise')");
             $pdo->exec("INSERT IGNORE INTO categories (name, slug) VALUES ('Electronics', 'electronics')");
         } catch (Throwable $e) {
@@ -212,8 +215,12 @@ class SchemaEnsure
         }
     }
 
+<<<<<<< HEAD
     /** delivered_at + order_returns for 7-day returns / review gating. */
     public static function orderReturns(): void
+=======
+    public static function cartAndOrderItems(): void
+>>>>>>> 0774d32 (Add per-colour stock, shop UX fixes, and deployment-ready schema updates.)
     {
         static $done = false;
         if ($done) {
@@ -223,6 +230,7 @@ class SchemaEnsure
 
         try {
             $pdo = Database::connection();
+<<<<<<< HEAD
             if (!self::columnExists($pdo, 'orders', 'delivered_at')) {
                 $pdo->exec('ALTER TABLE orders ADD COLUMN delivered_at DATETIME NULL');
             }
@@ -244,6 +252,22 @@ class SchemaEnsure
             );
         } catch (Throwable $e) {
             error_log('[SchemaEnsure] orderReturns: ' . $e->getMessage());
+=======
+            if (!self::columnExists($pdo, 'cart', 'color')) {
+                $pdo->exec('ALTER TABLE cart ADD COLUMN color VARCHAR(50) DEFAULT NULL');
+            }
+            if (!self::columnExists($pdo, 'cart', 'size')) {
+                $pdo->exec('ALTER TABLE cart ADD COLUMN size VARCHAR(50) DEFAULT NULL');
+            }
+            if (!self::columnExists($pdo, 'order_items', 'color')) {
+                $pdo->exec('ALTER TABLE order_items ADD COLUMN color VARCHAR(50) DEFAULT NULL');
+            }
+            if (!self::columnExists($pdo, 'order_items', 'size')) {
+                $pdo->exec('ALTER TABLE order_items ADD COLUMN size VARCHAR(50) DEFAULT NULL');
+            }
+        } catch (Throwable $e) {
+            error_log('[SchemaEnsure] cartAndOrderItems: ' . $e->getMessage());
+>>>>>>> 0774d32 (Add per-colour stock, shop UX fixes, and deployment-ready schema updates.)
         }
     }
 

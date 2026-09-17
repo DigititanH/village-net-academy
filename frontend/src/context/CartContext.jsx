@@ -27,8 +27,13 @@ export function CartProvider({ children }) {
   };
 
   const updateQuantity = async (id, quantity) => {
-    await api.put(`/cart/${id}`, { quantity });
-    await fetchCart();
+    try {
+      await api.put(`/cart/${id}`, { quantity });
+      await fetchCart();
+    } catch (err) {
+      const msg = err.response?.data?.message || "Could not update quantity";
+      throw new Error(msg);
+    }
   };
 
   const updateSize = async (id, size) => {

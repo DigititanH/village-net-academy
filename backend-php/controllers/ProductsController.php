@@ -99,7 +99,7 @@ class ProductsController
         $search = Request::query('search');
         $sort = Request::query('sort');
         $page = max(1, (int) Request::query('page', 1));
-        $limit = max(1, (int) Request::query('limit', 12));
+        $limit = max(1, min(200, (int) Request::query('limit', 100)));
 
         $sql = "SELECT p.*, c.name as category_name, c.slug as category_slug,
             (SELECT ROUND(AVG(rating),1) FROM reviews WHERE product_id = p.id) as avg_rating,
@@ -208,10 +208,16 @@ class ProductsController
         }
         $slug = Request::slugify($name) . '-' . time();
 
+        $colorInfo = ColorStock::fromRequest($body);
+        $stockTotal = $colorInfo['map']
+            ? $colorInfo['total']
+            : (isset($body['stock']) && $body['stock'] !== '' ? max(0, (int) $body['stock']) : 0);
+        $colorsValue = $colorInfo['colorsJson'] ?? self::nullableString($body['colors'] ?? null);
+
         try {
             $result = Database::queryRun(
-                'INSERT INTO products (name, slug, description, price, compare_price, category_id, subcategory, image, stock, sizes, colors)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                'INSERT INTO products (name, slug, description, price, compare_price, category_id, subcategory, image, stock, sizes, colors, color_stock)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 [
                     $name,
                     $slug,
@@ -221,20 +227,43 @@ class ProductsController
                     $categoryId,
                     $subcategory,
                     $imageUrl,
-                    isset($body['stock']) && $body['stock'] !== '' ? (int) $body['stock'] : 0,
+                    $stockTotal,
                     $categorySlug === 'merchandise' ? self::nullableString($body['sizes'] ?? null) : null,
-                    self::nullableString($body['colors'] ?? null),
+                    $colorsValue,
+                    $colorInfo['colorStockJson'],
                 ]
             );
         } catch (Throwable $e) {
             SchemaEnsure::products();
             if (stripos($e->getMessage(), 'Unknown column') !== false || stripos($e->getMessage(), '42S22') !== false) {
-                Response::error(
-                    'Database schema is out of date. Import backend-php/database/UPGRADE-LIVE-VIA-PHPMYADMIN.sql in phpMyAdmin, then try again.',
-                    500
-                );
+                // Retry without color_stock if column missing mid-flight
+                try {
+                    $result = Database::queryRun(
+                        'INSERT INTO products (name, slug, description, price, compare_price, category_id, subcategory, image, stock, sizes, colors)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                        [
+                            $name,
+                            $slug,
+                            self::nullableString($body['description'] ?? null),
+                            $body['price'] ?? 0,
+                            self::nullableDecimal($body['compare_price'] ?? null),
+                            $categoryId,
+                            $subcategory,
+                            $imageUrl,
+                            $stockTotal,
+                            $categorySlug === 'merchandise' ? self::nullableString($body['sizes'] ?? null) : null,
+                            $colorsValue,
+                        ]
+                    );
+                } catch (Throwable $e2) {
+                    Response::error(
+                        'Database schema is out of date. Import backend-php/database/UPGRADE-LIVE-VIA-PHPMYADMIN.sql in phpMyAdmin, then try again.',
+                        500
+                    );
+                }
+            } else {
+                throw $e;
             }
-            throw $e;
         }
 
         Response::json(['id' => $result['lastInsertRowid'], 'message' => 'Product created', 'image' => $imageUrl], 201);
@@ -256,7 +285,7 @@ class ProductsController
             Response::error('Invalid product id', 400);
         }
 
-        $existing = Database::queryGet('SELECT id FROM products WHERE id = ?', [$id]);
+        $existing = Database::queryGet('SELECT id, color_stock FROM products WHERE id = ?', [$id]);
         if (!$existing) {
             Response::error('Product not found', 404);
         }
@@ -313,7 +342,26 @@ class ProductsController
             $sqlParams[] = $subcategory;
         }
 
-        if (array_key_exists('stock', $body)) {
+        if (array_key_exists('color_stock', $body) || array_key_exists('colors', $body)) {
+            $colorInfo = ColorStock::fromRequest($body, $existing['color_stock'] ?? null);
+            $fields[] = 'colors = ?';
+            $sqlParams[] = $colorInfo['colorsJson'];
+            $fields[] = 'color_stock = ?';
+            $sqlParams[] = $colorInfo['colorStockJson'];
+            if ($colorInfo['map']) {
+                $fields[] = 'stock = ?';
+                $sqlParams[] = $colorInfo['total'];
+            } elseif (array_key_exists('stock', $body)) {
+                $fields[] = 'stock = ?';
+                $sqlParams[] = max(0, (int) $body['stock']);
+            } elseif ($colorInfo['colorsJson'] === null) {
+                // Colours cleared — keep stock as provided or unchanged
+                if (array_key_exists('stock', $body)) {
+                    $fields[] = 'stock = ?';
+                    $sqlParams[] = max(0, (int) $body['stock']);
+                }
+            }
+        } elseif (array_key_exists('stock', $body)) {
             $fields[] = 'stock = ?';
             $sqlParams[] = max(0, (int) $body['stock']);
         }
@@ -324,10 +372,6 @@ class ProductsController
             }
             $fields[] = 'sizes = ?';
             $sqlParams[] = $sizesValue;
-        }
-        if (array_key_exists('colors', $body)) {
-            $fields[] = 'colors = ?';
-            $sqlParams[] = ($body['colors'] === '' || $body['colors'] === null) ? null : $body['colors'];
         }
         if (array_key_exists('is_active', $body)) {
             $fields[] = 'is_active = ?';

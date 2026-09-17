@@ -4,7 +4,7 @@ import { ShoppingCart, Trash2, Plus, Minus } from "lucide-react";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import { getReferralCode, setReferralCode } from "../lib/referral";
-import { parseProductOptions } from "../lib/productOptions";
+import { parseProductOptions, colorSwatchHex } from "../lib/productOptions";
 import toast from "react-hot-toast";
 
 export default function Cart() {
@@ -47,7 +47,7 @@ export default function Cart() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="font-bold truncate">{item.name}</h3>
-                  <div className="flex flex-wrap items-center gap-2 mt-1">
+                  <div className="flex flex-col gap-2 mt-1">
                     {parseProductOptions(item.available_sizes).length > 0 ? (
                       <select
                         value={item.size || ""}
@@ -60,16 +60,32 @@ export default function Cart() {
                     ) : item.size ? (
                       <span className="text-sm text-gray-400">Size: {item.size}</span>
                     ) : null}
-                    {item.color && <span className="text-sm text-gray-400">Color: {item.color}</span>}
+                    {item.color && (
+                      <span className="text-sm text-gray-400 inline-flex items-center gap-2">
+                        Color:
+                        <span
+                          className={`inline-block w-4 h-4 rounded-full border-2 ${
+                            ["white", "cream", "beige", "yellow", "silver"].some((n) =>
+                              String(item.color).toLowerCase().includes(n)
+                            )
+                              ? "border-gray-400"
+                              : "border-white/40"
+                          }`}
+                          style={{ backgroundColor: colorSwatchHex(item.color) }}
+                          aria-hidden
+                        />
+                        {item.color}
+                      </span>
+                    )}
                   </div>
                   <p className="font-bold text-burnt-600 mt-1">R{Number(item.price).toFixed(2)}</p>
                 </div>
               </div>
               <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4 pl-[4.75rem] sm:pl-0">
                 <div className="flex items-center gap-2">
-                  <button type="button" onClick={() => updateQuantity(item.id, item.quantity - 1)} className="p-2 rounded-xl hover:bg-white/10 transition-colors" aria-label="Decrease quantity"><Minus size={16} /></button>
+                  <button type="button" onClick={async () => { try { await updateQuantity(item.id, item.quantity - 1); } catch (err) { toast.error(err.message); } }} className="p-2 rounded-xl hover:bg-white/10 transition-colors" aria-label="Decrease quantity"><Minus size={16} /></button>
                   <span className="w-8 text-center font-bold">{item.quantity}</span>
-                  <button type="button" onClick={() => updateQuantity(item.id, item.quantity + 1)} className="p-2 rounded-xl hover:bg-white/10 transition-colors" aria-label="Increase quantity"><Plus size={16} /></button>
+                  <button type="button" onClick={async () => { try { await updateQuantity(item.id, item.quantity + 1); } catch (err) { toast.error(err.message); } }} className="p-2 rounded-xl hover:bg-white/10 transition-colors" aria-label="Increase quantity"><Plus size={16} /></button>
                 </div>
                 <p className="font-black text-right text-burnt-600 shrink-0">R{(item.price * item.quantity).toFixed(2)}</p>
                 <button type="button" onClick={() => removeItem(item.id)} className="p-2 text-red-400 hover:bg-red-500/10 rounded-xl transition-colors" aria-label="Remove item"><Trash2 size={18} /></button>

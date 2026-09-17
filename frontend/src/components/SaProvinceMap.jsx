@@ -82,7 +82,7 @@ export default function SaProvinceMap({ centres }) {
     <div className="grid lg:grid-cols-5 gap-6">
       <div className="lg:col-span-3 card p-4 overflow-hidden">
         <p className="text-sm text-gray-400 mb-3">
-          Click a province to view Digititan ASC training centres in that region.
+          Select a province on the Map to explore the Cisco Networking Academies across South Africa.
         </p>
         <ComposableMap
           projection="geoMercator"
@@ -181,7 +181,7 @@ export default function SaProvinceMap({ centres }) {
           <p className="text-center text-sm text-burnt-600 font-semibold mt-3">
             {activeProvince}
             {counts[activeProvince]
-              ? ` — ${counts[activeProvince]} ASC centre${counts[activeProvince] === 1 ? "" : "s"}`
+              ? ` — ${counts[activeProvince]} Centre${counts[activeProvince] === 1 ? "" : "s"}`
               : " — no centres listed yet"}
           </p>
         )}
@@ -198,7 +198,7 @@ export default function SaProvinceMap({ centres }) {
               <h3 className="text-lg font-bold text-white">{selectedProvince}</h3>
             </div>
             <p className="text-sm text-gray-400 mb-4">
-              Digititan ASC centres in this province
+              Digititan Centres in this province
               {provinceCentres.length > 0 && (
                 <>
                   {" "}
@@ -268,7 +268,7 @@ export default function SaProvinceMap({ centres }) {
               </ul>
             ) : (
               <p className="text-sm text-gray-400">
-                No ASC centres are listed for this province yet. Contact Digititan to partner in this region.
+                No Centres are listed for this province yet. Contact Digititan to partner in this region.
               </p>
             )}
           </>
@@ -277,7 +277,7 @@ export default function SaProvinceMap({ centres }) {
             <MapPin size={32} className="text-burnt-600 mb-3 opacity-80" />
             <p className="text-white font-semibold mb-1">Select a province</p>
             <p className="text-sm text-gray-400">
-              Click any province on the map to see all Digititan ASC training centres in that area.
+              Click any province on the map to see all Digititan Centres in that area.
             </p>
           </div>
         )}

@@ -69,6 +69,22 @@ export default function Checkout() {
     const missingSize = items.find((i) => parseProductOptions(i.available_sizes).length > 0 && !i.size);
     if (missingSize) return toast.error(`Please select a size for "${missingSize.name}" in your cart`);
 
+    const missingColor = items.find((i) => {
+      const colors = parseProductOptions(i.available_colors || i.colors);
+      const fromStock = i.color_stock
+        ? (() => {
+            try {
+              const parsed = typeof i.color_stock === "string" ? JSON.parse(i.color_stock) : i.color_stock;
+              return parsed && typeof parsed === "object" ? Object.keys(parsed) : [];
+            } catch {
+              return [];
+            }
+          })()
+        : [];
+      return (colors.length > 0 || fromStock.length > 0) && !i.color;
+    });
+    if (missingColor) return toast.error(`Please select a colour for "${missingColor.name}" in your cart`);
+
     if (!address.phone.trim()) return toast.error("Phone number is required");
     if (deliveryMethod === "delivery") {
       if (![address.street, address.city, address.province, address.zip].every((v) => v.trim())) {

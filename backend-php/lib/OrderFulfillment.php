@@ -13,18 +13,22 @@ class OrderFulfillment
         }
 
         $items = Database::queryAll(
-            'SELECT oi.*, p.name, p.stock FROM order_items oi
+            'SELECT oi.*, p.name, p.stock, p.color_stock FROM order_items oi
              JOIN products p ON p.id = oi.product_id WHERE oi.order_id = ?',
             [$orderId]
         );
 
         foreach ($items as $item) {
-            if ((int) $item['stock'] < (int) $item['quantity']) {
-                throw new RuntimeException($item['name'] . ' is out of stock');
+            $colorMap = ColorStock::decode($item['color_stock'] ?? null);
+            $available = ColorStock::available($colorMap, $item['color'] ?? null, (int) $item['stock']);
+            if ($available < (int) $item['quantity']) {
+                $label = !empty($item['color']) ? ($item['name'] . ' (' . $item['color'] . ')') : $item['name'];
+                throw new RuntimeException($label . ' is out of stock');
             }
+            $next = ColorStock::deduct($colorMap, $item['color'] ?? null, (int) $item['quantity'], (int) $item['stock']);
             Database::queryRun(
-                'UPDATE products SET stock = stock - ? WHERE id = ?',
-                [$item['quantity'], $item['product_id']]
+                'UPDATE products SET stock = ?, color_stock = ? WHERE id = ?',
+                [$next['stock'], $next['color_stock'], $item['product_id']]
             );
         }
 

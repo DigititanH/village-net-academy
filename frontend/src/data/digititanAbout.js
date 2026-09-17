@@ -111,10 +111,10 @@ export const digititanRegistration = {
     url: digititanLinks.learnerRegistration,
   },
   asc: {
-    title: "NetAcad Academy Registration (ASC)",
+    title: "NetAcad Centres Registration",
     description:
-      "Digititan ASC registration supports schools, youth programmes, and community hubs with a structured model for digital-skills delivery and programme rollout. ASC (Academy Support Center) provides onboarding guidance, facilitator enablement, learner support, and clearer pathways to certification and employability outcomes.",
-    cta: "ASC Registration Form",
+      "Digititan Centres registration supports schools, youth programmes, and community hubs with a structured model for digital-skills delivery and programme rollout. Centres provide onboarding guidance, facilitator enablement, learner support, and clearer pathways to certification and employability outcomes.",
+    cta: "Centres Registration Form",
     url: digititanLinks.ascRegistration,
   },
 };

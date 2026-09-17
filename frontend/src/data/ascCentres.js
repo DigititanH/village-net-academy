@@ -1,4 +1,4 @@
-/** Digititan ASC (Academy Support Center) listings by province */
+/** Digititan Centres listings by province */
 
 export const SA_PROVINCES = [
   "Eastern Cape",

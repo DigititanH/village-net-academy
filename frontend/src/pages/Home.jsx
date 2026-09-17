@@ -118,7 +118,7 @@ export default function Home() {
               rel="noopener noreferrer"
               className="bg-burnt-500 px-8 py-3 rounded-full font-semibold hover:scale-105 transition shadow-lg shadow-burnt-500/30"
             >
-              ASC Registration
+              Centres Registration
             </a>
             <Link
               to="/training-academy"

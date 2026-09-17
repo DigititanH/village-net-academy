@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { ShoppingCart, Heart, Star, Send } from "lucide-react";
 import api from "../lib/api";
-import { parseProductOptions } from "../lib/productOptions";
+import { parseProductOptions, stockForColor, colorSwatchHex, parseColorStock } from "../lib/productOptions";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import toast from "react-hot-toast";
@@ -29,21 +29,70 @@ export default function ProductDetail() {
         const reviewRes = await api.get(`/reviews/product/${res.data.id}`);
         setReviews(Array.isArray(reviewRes.data) ? reviewRes.data : []);
         const isElec = String(res.data.category_slug || "").toLowerCase() === "electronics";
-        const sizes = isElec ? [] : parseProductOptions(res.data.sizes);
-        const colors = parseProductOptions(res.data.colors);
-        if (sizes.length) setSize(sizes[0]);
-        if (colors.length) setColor(colors[0]);
+        const nextSizes = isElec ? [] : parseProductOptions(res.data.sizes);
+        const fromColors = parseProductOptions(res.data.colors);
+        const fromStock = parseColorStock(res.data.color_stock, null).map((r) => r.name);
+        const seen = new Set();
+        const nextColors = [];
+        [...fromColors, ...fromStock].forEach((name) => {
+          const key = String(name).trim().toLowerCase();
+          if (!key || seen.has(key)) return;
+          seen.add(key);
+          nextColors.push(String(name).trim());
+        });
+        if (nextSizes.length) setSize(nextSizes[0]);
+        if (nextColors.length) setColor(nextColors[0]);
+        setQty(1);
       } catch { /* empty */ }
       setLoading(false);
     };
     load();
   }, [slug]);
 
+  const sizes =
+    product && String(product.category_slug || "").toLowerCase() !== "electronics"
+      ? parseProductOptions(product.sizes)
+      : [];
+  const colors = product
+    ? (() => {
+        const fromColors = parseProductOptions(product.colors);
+        const fromStock = parseColorStock(product.color_stock, null).map((r) => r.name);
+        const seen = new Set();
+        const merged = [];
+        [...fromColors, ...fromStock].forEach((name) => {
+          const key = String(name).trim().toLowerCase();
+          if (!key || seen.has(key)) return;
+          seen.add(key);
+          merged.push(String(name).trim());
+        });
+        return merged;
+      })()
+    : [];
+  const availableStock = product ? stockForColor(product, colors.length ? color : null) : 0;
+
   const handleAdd = async () => {
     try {
+      if (sizes.length && !size) {
+        toast.error("Please select a size");
+        return;
+      }
+      if (colors.length && !color) {
+        toast.error("Please select a colour");
+        return;
+      }
+      if (availableStock < 1) {
+        toast.error(colors.length ? "This colour is out of stock" : "Out of stock");
+        return;
+      }
+      if (qty > availableStock) {
+        toast.error(`Only ${availableStock} left${colors.length ? " in this colour" : ""}`);
+        return;
+      }
       await addToCart(product.id, qty, size || undefined, color || undefined);
       toast.success("Added to cart!");
-    } catch { toast.error("Please login to add to cart"); }
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Please login to add to cart");
+    }
   };
 
   const handleWishlist = async () => {
@@ -67,11 +116,6 @@ export default function ProductDetail() {
   if (loading) return <div className="flex items-center justify-center min-h-[60vh]"><div className="animate-spin h-8 w-8 border-4 border-burnt-500 border-t-transparent rounded-full" /></div>;
   if (!product) return <div className="text-center py-20"><p className="text-gray-500 text-lg">Product not found.</p></div>;
 
-  const sizes =
-    String(product.category_slug || "").toLowerCase() === "electronics"
-      ? []
-      : parseProductOptions(product.sizes);
-  const colors = parseProductOptions(product.colors);
   const avgRating = reviews.length ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1) : "0";
 
   return (
@@ -125,22 +169,80 @@ export default function ProductDetail() {
             {colors.length > 0 && (
               <div className="mb-6">
                 <label className="block text-sm font-semibold mb-2 text-gray-300">Color</label>
-                <div className="flex gap-2 flex-wrap">{colors.map((c) => <button key={c} onClick={() => setColor(c)} className={`px-4 py-2 rounded-xl border text-sm font-bold transition-all duration-300 ${color === c ? "bg-gradient-to-r from-burnt-400 to-primary-400 text-white border-transparent shadow-[0_0_15px_rgba(14,165,233,0.28)]" : "border-white/20 hover:border-burnt-600/35"}`}>{c}</button>)}</div>
+                <div className="flex gap-2 flex-wrap">
+                  {colors.map((c) => {
+                    const cStock = stockForColor(product, c);
+                    const swatch = colorSwatchHex(c);
+                    const isLight = ["white", "cream", "beige", "yellow", "silver"].some((n) =>
+                      String(c).trim().toLowerCase().includes(n)
+                    );
+                    return (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => {
+                          setColor(c);
+                          setQty(1);
+                        }}
+                        disabled={cStock < 1}
+                        className={`inline-flex items-center gap-2.5 px-4 py-2 rounded-xl border text-sm font-bold transition-all duration-300 disabled:opacity-40 ${
+                          color === c
+                            ? "bg-gradient-to-r from-burnt-400 to-primary-400 text-white border-transparent shadow-[0_0_15px_rgba(14,165,233,0.28)]"
+                            : "border-white/20 hover:border-burnt-600/35"
+                        }`}
+                        title={cStock < 1 ? `${c} — out of stock` : c}
+                      >
+                        <span
+                          className={`inline-block w-5 h-5 rounded-full flex-shrink-0 border-2 ${
+                            isLight ? "border-gray-400" : "border-white/40"
+                          } ${cStock < 1 ? "opacity-50" : ""}`}
+                          style={{ backgroundColor: swatch }}
+                          aria-hidden
+                        />
+                        <span>{c}</span>
+                        <span className="font-medium opacity-80">({cStock})</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
             <div className="flex items-center gap-4 mb-6">
               <div className="flex items-center border border-white/20 rounded-xl bg-white/5">
-                <button onClick={() => setQty(Math.max(1, qty - 1))} className="px-3 py-2 text-lg font-bold hover:bg-white/10 transition-colors rounded-l-xl">-</button>
+                <button
+                  type="button"
+                  onClick={() => setQty(Math.max(1, qty - 1))}
+                  className="px-3 py-2 text-lg font-bold hover:bg-white/10 transition-colors rounded-l-xl"
+                >
+                  -
+                </button>
                 <span className="px-4 py-2 font-bold">{qty}</span>
-                <button onClick={() => setQty(qty + 1)} className="px-3 py-2 text-lg font-bold hover:bg-white/10 transition-colors rounded-r-xl">+</button>
+                <button
+                  type="button"
+                  onClick={() => setQty(Math.min(availableStock || 1, qty + 1))}
+                  className="px-3 py-2 text-lg font-bold hover:bg-white/10 transition-colors rounded-r-xl"
+                >
+                  +
+                </button>
               </div>
-              <span className="text-sm text-gray-400">{product.stock > 0 ? `${product.stock} in stock` : "Out of stock"}</span>
+              <span className="text-sm text-gray-400">
+                {availableStock > 0
+                  ? `${availableStock} in stock${colors.length && color ? ` (${color})` : ""}`
+                  : "Out of stock"}
+              </span>
             </div>
 
             <div className="flex gap-3">
-              <button onClick={handleAdd} disabled={product.stock < 1} className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-50"><ShoppingCart size={18} /> Add to Cart</button>
-              <button onClick={handleWishlist} className="btn-secondary !px-4"><Heart size={18} /></button>
+              <button
+                type="button"
+                onClick={handleAdd}
+                disabled={availableStock < 1}
+                className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <ShoppingCart size={18} /> Add to Cart
+              </button>
+              <button type="button" onClick={handleWishlist} className="btn-secondary !px-4"><Heart size={18} /></button>
             </div>
           </div>
         </div>
