@@ -28,8 +28,8 @@ export default function ProductDetail() {
         setProduct(res.data);
         const reviewRes = await api.get(`/reviews/product/${res.data.id}`);
         setReviews(Array.isArray(reviewRes.data) ? reviewRes.data : []);
-        const isElec = String(res.data.category_slug || "").toLowerCase() === "electronics";
-        const nextSizes = isElec ? [] : parseProductOptions(res.data.sizes);
+        const isApparel = String(res.data.category_slug || "").toLowerCase() === "merchandise";
+        const nextSizes = isApparel ? parseProductOptions(res.data.sizes) : [];
         const fromColors = parseProductOptions(res.data.colors);
         const fromStock = parseColorStock(res.data.color_stock, null).map((r) => r.name);
         const seen = new Set();
@@ -50,7 +50,7 @@ export default function ProductDetail() {
   }, [slug]);
 
   const sizes =
-    product && String(product.category_slug || "").toLowerCase() !== "electronics"
+    product && String(product.category_slug || "").toLowerCase() === "merchandise"
       ? parseProductOptions(product.sizes)
       : [];
   const colors = product

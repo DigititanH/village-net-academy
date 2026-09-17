@@ -106,6 +106,7 @@ try {
 try {
     $pdo->exec("INSERT IGNORE INTO categories (name, slug) VALUES ('Merchandise', 'merchandise')");
     $pdo->exec("INSERT IGNORE INTO categories (name, slug) VALUES ('Electronics', 'electronics')");
+    $pdo->exec("INSERT IGNORE INTO categories (name, slug) VALUES ('Accessories', 'accessories')");
     echo "OK store categories\n";
 } catch (Throwable $e) {
     echo 'WARN categories: ' . $e->getMessage() . "\n";

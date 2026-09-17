@@ -3,27 +3,19 @@
 @tailwind utilities;
 
 @layer base {
-  /* Same desktop canvas on all devices (phones scale this width to fit) */
-  :root {
-    --site-min-width: 1280px;
-  }
-
   html {
     @apply min-h-full;
-    min-width: var(--site-min-width);
-    overflow-x: auto;
+    overflow-x: clip;
   }
 
   body {
     @apply min-h-full text-white font-sans antialiased;
     background-color: #000000;
-    min-width: var(--site-min-width);
-    overflow-x: auto;
+    overflow-x: clip;
   }
 
   #root {
-    @apply min-h-full;
-    min-width: var(--site-min-width);
+    @apply min-h-full min-w-0 overflow-x-clip;
     width: 100%;
   }
 

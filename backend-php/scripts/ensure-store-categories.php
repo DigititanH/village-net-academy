@@ -4,6 +4,7 @@ require_once dirname(__DIR__) . '/bootstrap.php';
 $cats = [
     ['Merchandise', 'merchandise'],
     ['Electronics', 'electronics'],
+    ['Accessories', 'accessories'],
 ];
 
 foreach ($cats as [$name, $slug]) {

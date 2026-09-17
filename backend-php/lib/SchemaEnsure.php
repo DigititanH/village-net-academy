@@ -210,6 +210,7 @@ class SchemaEnsure
             }
             $pdo->exec("INSERT IGNORE INTO categories (name, slug) VALUES ('Merchandise', 'merchandise')");
             $pdo->exec("INSERT IGNORE INTO categories (name, slug) VALUES ('Electronics', 'electronics')");
+            $pdo->exec("INSERT IGNORE INTO categories (name, slug) VALUES ('Accessories', 'accessories')");
         } catch (Throwable $e) {
             error_log('[SchemaEnsure] products: ' . $e->getMessage());
         }

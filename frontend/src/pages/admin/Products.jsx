@@ -2,7 +2,12 @@ import { useState, useEffect, useMemo } from "react";
 import { Plus, Pencil, Trash2, X, Check } from "lucide-react";
 import api from "../../lib/api";
 import toast from "react-hot-toast";
-import { productTypeLabel, typesForDepartment } from "../../lib/productTypes";
+import {
+  productTypeLabel,
+  typesForDepartment,
+  merchandiseUsesSizes,
+  STORE_DEPARTMENT_SLUGS,
+} from "../../lib/productTypes";
 import { parseColorStock, parseProductOptions } from "../../lib/productOptions";
 
 const emptyForm = {
@@ -19,7 +24,7 @@ const emptyForm = {
   is_active: "1",
 };
 
-const DEPARTMENT_SLUGS = ["merchandise", "electronics"];
+const DEPARTMENT_SLUGS = STORE_DEPARTMENT_SLUGS;
 
 function appendFormData(fd, form) {
   const skipIfEmpty = new Set(["compare_price", "category_id", "subcategory", "sizes", "colors", "color_stock"]);
@@ -83,12 +88,14 @@ export default function AdminProducts() {
     const name = String(selectedDepartment.name || "").toLowerCase();
     if (name.includes("electronic")) return "electronics";
     if (name.includes("merchandise")) return "merchandise";
+    if (name.includes("accessor")) return "accessories";
     return slug;
   }, [selectedDepartment]);
 
   const isElectronics = departmentSlug === "electronics";
   const isMerchandise = departmentSlug === "merchandise";
-  const showSizes = isMerchandise;
+  const isAccessories = departmentSlug === "accessories";
+  const showSizes = isMerchandise && merchandiseUsesSizes(form.subcategory);
   const typeOptions = typesForDepartment(departmentSlug);
 
   const fetchData = async () => {
@@ -185,27 +192,31 @@ export default function AdminProducts() {
   const handleCategoryChange = (categoryId) => {
     const dept = departments.find((c) => String(c.id) === String(categoryId));
     const slug = String(dept?.slug || "").toLowerCase();
-    const isElec = slug === "electronics" || String(dept?.name || "").toLowerCase().includes("electronic");
+    const isMerch = slug === "merchandise" || String(dept?.name || "").toLowerCase().includes("merchandise");
     setForm((prev) => ({
       ...prev,
       category_id: categoryId,
       subcategory: "",
-      sizes: isElec ? "" : prev.sizes,
+      sizes: isMerch ? prev.sizes : "",
     }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.category_id) {
-      toast.error("Please select Merchandise or Electronics");
+      toast.error("Please select Merchandise, Electronics, or Accessories");
       return;
     }
     if (isElectronics && !form.subcategory) {
-      toast.error("Please select Laptop, Tablet, or Accessories");
+      toast.error("Please select Laptop or Tablet");
       return;
     }
     if (isMerchandise && !form.subcategory) {
       toast.error("Please select Hoodie, T-shirt, Cap, or Golf t-shirt");
+      return;
+    }
+    if (isAccessories && !form.subcategory) {
+      toast.error("Please select Bags, USB, Headphones, Powerbank, or Cameras");
       return;
     }
 
@@ -446,7 +457,7 @@ export default function AdminProducts() {
                   onChange={(e) => handleCategoryChange(e.target.value)}
                   className="input-field"
                 >
-                  <option value="">Select Merchandise or Electronics</option>
+                  <option value="">Select Merchandise, Electronics, or Accessories</option>
                   {departments.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
@@ -458,7 +469,11 @@ export default function AdminProducts() {
               {typeOptions.length > 0 && (
                 <div>
                   <label className="block text-sm font-medium mb-2">
-                    {isElectronics ? "Electronics type" : "Merchandise type"}
+                    {isElectronics
+                      ? "Electronics type"
+                      : isAccessories
+                        ? "Accessories type"
+                        : "Merchandise type"}
                   </label>
                   <select
                     required

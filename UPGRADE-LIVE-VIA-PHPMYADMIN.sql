@@ -60,3 +60,4 @@ ALTER TABLE order_items ADD COLUMN color VARCHAR(50) DEFAULT NULL;
 -- Store categories (required for Add Product department dropdown)
 INSERT IGNORE INTO categories (name, slug) VALUES ('Merchandise', 'merchandise');
 INSERT IGNORE INTO categories (name, slug) VALUES ('Electronics', 'electronics');
+INSERT IGNORE INTO categories (name, slug) VALUES ('Accessories', 'accessories');

@@ -58,17 +58,24 @@ export default function Navbar() {
   };
 
   return (
-    <nav className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-[minmax(0,auto)_1fr_minmax(0,auto)] items-center gap-2 sm:gap-4 h-16 sm:h-20">
+    <nav
+      className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm"
+      style={{ paddingTop: "env(safe-area-inset-top)" }}
+    >
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,auto)_1fr_minmax(0,auto)] items-center gap-2 sm:gap-4 h-14 sm:h-20">
           <Link to="/" className="flex items-center gap-2 sm:gap-3 shrink-0 min-w-0">
-            <img src="/Village Netacad Programme (6).png" alt="Village NetAcad" className="h-10 sm:h-14 md:h-16 w-auto max-w-[120px] sm:max-w-none object-contain flex-shrink-0" />
-            <div className="min-w-0 hidden sm:block">
-              <span className="font-display font-bold text-base lg:text-lg tracking-wide leading-tight block">
+            <img
+              src="/Village Netacad Programme (6).png"
+              alt="Village NetAcad"
+              className="h-9 sm:h-14 md:h-16 w-auto max-w-[88px] sm:max-w-none object-contain flex-shrink-0"
+            />
+            <div className="min-w-0">
+              <span className="font-display font-bold text-sm sm:text-base lg:text-lg tracking-wide leading-tight block truncate">
                 <span className="text-burnt-600">Village</span>{" "}
                 <span className="text-slate-800">NetAcad</span>
               </span>
-              <p className="text-[9px] tracking-wide text-slate-500 leading-tight">
+              <p className="hidden sm:block text-[9px] tracking-wide text-slate-500 leading-tight">
                 Village NetAcad powered by Digititan
               </p>
             </div>
@@ -130,10 +137,14 @@ export default function Navbar() {
             ))}
           </div>
 
-          <div className="flex items-center justify-end gap-1.5 sm:gap-3">
+          <div className="flex items-center justify-end gap-1 sm:gap-3 col-start-2 md:col-start-auto">
             <GlobalSearch />
 
-            <Link to="/cart" className="p-2 rounded-xl hover:bg-slate-100 transition-colors relative text-slate-700 hover:text-burnt-600 flex-shrink-0">
+            <Link
+              to="/cart"
+              className="p-2 rounded-xl hover:bg-slate-100 transition-colors relative text-slate-700 hover:text-burnt-600 flex-shrink-0"
+              aria-label="Cart"
+            >
               <ShoppingCart size={18} />
               {count > 0 && (
                 <span className="absolute -top-1 -right-1 bg-glossy-gradient text-white text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold">

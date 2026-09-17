@@ -20,6 +20,7 @@ ALTER TABLE hero_buttons ADD COLUMN slide_id INT NULL;
 -- Store departments
 INSERT IGNORE INTO categories (name, slug) VALUES ('Merchandise', 'merchandise');
 INSERT IGNORE INTO categories (name, slug) VALUES ('Electronics', 'electronics');
+INSERT IGNORE INTO categories (name, slug) VALUES ('Accessories', 'accessories');
 
 -- Hero slide wording placement
 ALTER TABLE hero_slides ADD COLUMN text_position VARCHAR(40) NOT NULL DEFAULT 'center';

@@ -28,15 +28,27 @@ class ProductsController
     }
 
     /** @return list<string> */
+    private static function storeDepartments(): array
+    {
+        return ['merchandise', 'electronics', 'accessories'];
+    }
+
+    /** @return list<string> */
     private static function electronicsTypes(): array
     {
-        return ['laptop', 'tablet', 'accessories'];
+        return ['laptop', 'tablet'];
     }
 
     /** @return list<string> */
     private static function merchandiseTypes(): array
     {
         return ['hoodie', 't-shirt', 'cap', 'golf-t-shirt'];
+    }
+
+    /** @return list<string> */
+    private static function accessoriesTypes(): array
+    {
+        return ['bags', 'usb', 'headphones', 'powerbank', 'cameras'];
     }
 
     private static function normalizeSubcategory(mixed $value, ?string $categorySlug = null): ?string
@@ -50,9 +62,6 @@ class ProductsController
         $aliases = [
             'laptops' => 'laptop',
             'tablets' => 'tablet',
-            'accessory' => 'accessories',
-            'accesories' => 'accessories',
-            'accesorries' => 'accessories',
             'hoodies' => 'hoodie',
             'tshirt' => 't-shirt',
             'tshirts' => 't-shirt',
@@ -67,6 +76,32 @@ class ProductsController
             'golf-tee' => 'golf-t-shirt',
             'golftee' => 'golf-t-shirt',
             'golftshirt' => 'golf-t-shirt',
+            'bag' => 'bags',
+            'backpack' => 'bags',
+            'backpacks' => 'bags',
+            'tote' => 'bags',
+            'totes' => 'bags',
+            'usbs' => 'usb',
+            'usb-stick' => 'usb',
+            'usb-sticks' => 'usb',
+            'flash-drive' => 'usb',
+            'flashdrive' => 'usb',
+            'thumb-drive' => 'usb',
+            'headphone' => 'headphones',
+            'earphone' => 'headphones',
+            'earphones' => 'headphones',
+            'earbuds' => 'headphones',
+            'earbud' => 'headphones',
+            'headset' => 'headphones',
+            'headsets' => 'headphones',
+            'power-bank' => 'powerbank',
+            'power-banks' => 'powerbank',
+            'powerbanks' => 'powerbank',
+            'camera' => 'cameras',
+            'webcam' => 'cameras',
+            'webcams' => 'cameras',
+            'cam' => 'cameras',
+            'cams' => 'cameras',
         ];
         $normalized = $aliases[$raw] ?? $raw;
 
@@ -76,8 +111,15 @@ class ProductsController
         if ($categorySlug === 'merchandise') {
             return in_array($normalized, self::merchandiseTypes(), true) ? $normalized : null;
         }
+        if ($categorySlug === 'accessories') {
+            return in_array($normalized, self::accessoriesTypes(), true) ? $normalized : null;
+        }
 
-        if (in_array($normalized, self::electronicsTypes(), true) || in_array($normalized, self::merchandiseTypes(), true)) {
+        if (
+            in_array($normalized, self::electronicsTypes(), true)
+            || in_array($normalized, self::merchandiseTypes(), true)
+            || in_array($normalized, self::accessoriesTypes(), true)
+        ) {
             return $normalized;
         }
         return null;
@@ -190,16 +232,19 @@ class ProductsController
 
         $categoryId = self::nullableInt($body['category_id'] ?? null);
         $categorySlug = self::categorySlugById($categoryId);
-        if (!$categoryId || !in_array($categorySlug, ['merchandise', 'electronics'], true)) {
-            Response::error('Please select Merchandise or Electronics', 400);
+        if (!$categoryId || !in_array($categorySlug, self::storeDepartments(), true)) {
+            Response::error('Please select Merchandise, Electronics, or Accessories', 400);
         }
 
         $subcategory = self::normalizeSubcategory($body['subcategory'] ?? null, $categorySlug);
         if ($categorySlug === 'electronics' && !$subcategory) {
-            Response::error('Please select an electronics type (Laptop, Tablet, or Accessories)', 400);
+            Response::error('Please select an electronics type (Laptop or Tablet)', 400);
         }
         if ($categorySlug === 'merchandise' && !$subcategory) {
             Response::error('Please select a merchandise type (Hoodie, T-shirt, Cap, or Golf t-shirt)', 400);
+        }
+        if ($categorySlug === 'accessories' && !$subcategory) {
+            Response::error('Please select an accessories type (Bags, USB, Headphones, Powerbank, or Cameras)', 400);
         }
 
         $imageUrl = Request::handleUpload($_FILES['image'] ?? null);
@@ -315,8 +360,8 @@ class ProductsController
         if (array_key_exists('category_id', $body)) {
             $categoryIdForSub = self::nullableInt($body['category_id']);
             $categorySlug = self::categorySlugById($categoryIdForSub);
-            if (!$categoryIdForSub || !in_array($categorySlug, ['merchandise', 'electronics'], true)) {
-                Response::error('Please select Merchandise or Electronics', 400);
+            if (!$categoryIdForSub || !in_array($categorySlug, self::storeDepartments(), true)) {
+                Response::error('Please select Merchandise, Electronics, or Accessories', 400);
             }
             $fields[] = 'category_id = ?';
             $sqlParams[] = $categoryIdForSub;
@@ -333,10 +378,13 @@ class ProductsController
         if (array_key_exists('subcategory', $body) || array_key_exists('category_id', $body)) {
             $subcategory = self::normalizeSubcategory($body['subcategory'] ?? null, $categorySlug);
             if ($categorySlug === 'electronics' && !$subcategory) {
-                Response::error('Please select an electronics type (Laptop, Tablet, or Accessories)', 400);
+                Response::error('Please select an electronics type (Laptop or Tablet)', 400);
             }
             if ($categorySlug === 'merchandise' && !$subcategory) {
                 Response::error('Please select a merchandise type (Hoodie, T-shirt, Cap, or Golf t-shirt)', 400);
+            }
+            if ($categorySlug === 'accessories' && !$subcategory) {
+                Response::error('Please select an accessories type (Bags, USB, Headphones, Powerbank, or Cameras)', 400);
             }
             $fields[] = 'subcategory = ?';
             $sqlParams[] = $subcategory;
@@ -367,7 +415,7 @@ class ProductsController
         }
         if (array_key_exists('sizes', $body)) {
             $sizesValue = ($body['sizes'] === '' || $body['sizes'] === null) ? null : $body['sizes'];
-            if (($categorySlug ?? null) === 'electronics') {
+            if (($categorySlug ?? null) !== 'merchandise') {
                 $sizesValue = null;
             }
             $fields[] = 'sizes = ?';

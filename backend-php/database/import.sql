@@ -293,6 +293,7 @@ CREATE TABLE IF NOT EXISTS hero_buttons (
 -- seed.sql
 INSERT IGNORE INTO categories (name, slug) VALUES ('Merchandise', 'merchandise');
 INSERT IGNORE INTO categories (name, slug) VALUES ('Electronics', 'electronics');
+INSERT IGNORE INTO categories (name, slug) VALUES ('Accessories', 'accessories');
 INSERT IGNORE INTO categories (name, slug) VALUES ('T-Shirts', 't-shirts');
 INSERT IGNORE INTO categories (name, slug) VALUES ('Hoodies', 'hoodies');
 INSERT IGNORE INTO categories (name, slug) VALUES ('Caps', 'caps');

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Search, ShoppingCart, Star, Shirt, Cpu } from "lucide-react";
+import { Search, ShoppingCart, Star, Shirt, Cpu, Watch } from "lucide-react";
 import api from "../lib/api";
 import { parseProductOptions, stockForColor, colorSwatchHex, parseColorStock } from "../lib/productOptions";
 import { useCart } from "../context/CartContext";
@@ -10,20 +10,28 @@ import { pageHeroImages } from "../data/pageHeroImages";
 import {
   productTypeLabel,
   typesForDepartment,
+  STORE_DEPARTMENT_SLUGS,
+  isStoreDepartment,
 } from "../lib/productTypes";
 
 const STORE_DEPARTMENTS = [
   {
     slug: "merchandise",
     name: "Merchandise",
-    desc: "Branded apparel, bags, caps and Village NetAcad gear.",
+    desc: "Branded apparel and Village NetAcad gear.",
     icon: Shirt,
   },
   {
     slug: "electronics",
     name: "Electronics",
-    desc: "Tech tools and devices that support learning and training.",
+    desc: "Laptops, tablets and devices for learning.",
     icon: Cpu,
+  },
+  {
+    slug: "accessories",
+    name: "Accessories",
+    desc: "Bags, USB drives, headphones, powerbanks and cameras.",
+    icon: Watch,
   },
 ];
 
@@ -51,7 +59,7 @@ export default function Shop() {
     const load = async () => {
       try {
         const params = { search, category, sort, limit: 200 };
-        if ((category === "electronics" || category === "merchandise") && subcategory) {
+        if (isStoreDepartment(category) && subcategory) {
           params.subcategory = subcategory;
         }
         const [prodRes, catRes] = await Promise.all([
@@ -70,7 +78,7 @@ export default function Shop() {
   }, [search, category, subcategory, sort]);
 
   const otherCategories = useMemo(
-    () => categories.filter((c) => !["merchandise", "electronics"].includes(c.slug)),
+    () => categories.filter((c) => !STORE_DEPARTMENT_SLUGS.includes(c.slug)),
     [categories]
   );
 
@@ -93,7 +101,7 @@ export default function Shop() {
   };
 
   const getSizes = (p) => {
-    if (String(p.category_slug || "").toLowerCase() === "electronics") return [];
+    if (String(p.category_slug || "").toLowerCase() !== "merchandise") return [];
     return parseProductOptions(p.sizes);
   };
 
@@ -145,14 +153,14 @@ export default function Shop() {
     <div>
       <PageHero
         image={pageHeroImages.shop}
-        alt="Village NetAcad store merchandise and electronics"
+        alt="Village NetAcad store merchandise, electronics and accessories"
         title="Village Netacad Store"
-        subtitle="Shop branded merchandise and electronics that support Village NetAcad."
+        subtitle="Shop branded merchandise, electronics and accessories that support Village NetAcad."
       />
 
       <section className="section-padding">
         <div className="max-w-7xl mx-auto">
-          <div className="grid sm:grid-cols-2 gap-4 mb-8">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
             {STORE_DEPARTMENTS.map((dept) => {
               const active = category === dept.slug;
               const Icon = dept.icon;
@@ -196,6 +204,7 @@ export default function Shop() {
               <option value="">All Categories</option>
               <option value="merchandise">Merchandise</option>
               <option value="electronics">Electronics</option>
+              <option value="accessories">Accessories</option>
               {otherCategories.map((c) => (
                 <option key={c.id} value={c.slug}>{c.name}</option>
               ))}
@@ -207,7 +216,7 @@ export default function Shop() {
             </select>
           </div>
 
-          {(category === "electronics" || category === "merchandise") && (
+          {isStoreDepartment(category) && (
             <div className="flex flex-wrap gap-2 mb-6">
               <button
                 type="button"
@@ -218,7 +227,7 @@ export default function Shop() {
                     : "border-white/10 bg-white/5 text-gray-400 hover:border-burnt-400/30"
                 }`}
               >
-                All {category === "electronics" ? "electronics" : "merchandise"}
+                All {STORE_DEPARTMENTS.find((d) => d.slug === category)?.name?.toLowerCase() || category}
               </button>
               {typesForDepartment(category).map((t) => (
                 <button
