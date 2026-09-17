@@ -215,12 +215,7 @@ class SchemaEnsure
         }
     }
 
-<<<<<<< HEAD
-    /** delivered_at + order_returns for 7-day returns / review gating. */
-    public static function orderReturns(): void
-=======
     public static function cartAndOrderItems(): void
->>>>>>> 0774d32 (Add per-colour stock, shop UX fixes, and deployment-ready schema updates.)
     {
         static $done = false;
         if ($done) {
@@ -230,7 +225,34 @@ class SchemaEnsure
 
         try {
             $pdo = Database::connection();
-<<<<<<< HEAD
+            if (!self::columnExists($pdo, 'cart', 'color')) {
+                $pdo->exec('ALTER TABLE cart ADD COLUMN color VARCHAR(50) DEFAULT NULL');
+            }
+            if (!self::columnExists($pdo, 'cart', 'size')) {
+                $pdo->exec('ALTER TABLE cart ADD COLUMN size VARCHAR(50) DEFAULT NULL');
+            }
+            if (!self::columnExists($pdo, 'order_items', 'color')) {
+                $pdo->exec('ALTER TABLE order_items ADD COLUMN color VARCHAR(50) DEFAULT NULL');
+            }
+            if (!self::columnExists($pdo, 'order_items', 'size')) {
+                $pdo->exec('ALTER TABLE order_items ADD COLUMN size VARCHAR(50) DEFAULT NULL');
+            }
+        } catch (Throwable $e) {
+            error_log('[SchemaEnsure] cartAndOrderItems: ' . $e->getMessage());
+        }
+    }
+
+    /** delivered_at + order_returns for 7-day returns / review gating. */
+    public static function orderReturns(): void
+    {
+        static $done = false;
+        if ($done) {
+            return;
+        }
+        $done = true;
+
+        try {
+            $pdo = Database::connection();
             if (!self::columnExists($pdo, 'orders', 'delivered_at')) {
                 $pdo->exec('ALTER TABLE orders ADD COLUMN delivered_at DATETIME NULL');
             }
@@ -252,22 +274,6 @@ class SchemaEnsure
             );
         } catch (Throwable $e) {
             error_log('[SchemaEnsure] orderReturns: ' . $e->getMessage());
-=======
-            if (!self::columnExists($pdo, 'cart', 'color')) {
-                $pdo->exec('ALTER TABLE cart ADD COLUMN color VARCHAR(50) DEFAULT NULL');
-            }
-            if (!self::columnExists($pdo, 'cart', 'size')) {
-                $pdo->exec('ALTER TABLE cart ADD COLUMN size VARCHAR(50) DEFAULT NULL');
-            }
-            if (!self::columnExists($pdo, 'order_items', 'color')) {
-                $pdo->exec('ALTER TABLE order_items ADD COLUMN color VARCHAR(50) DEFAULT NULL');
-            }
-            if (!self::columnExists($pdo, 'order_items', 'size')) {
-                $pdo->exec('ALTER TABLE order_items ADD COLUMN size VARCHAR(50) DEFAULT NULL');
-            }
-        } catch (Throwable $e) {
-            error_log('[SchemaEnsure] cartAndOrderItems: ' . $e->getMessage());
->>>>>>> 0774d32 (Add per-colour stock, shop UX fixes, and deployment-ready schema updates.)
         }
     }
 
