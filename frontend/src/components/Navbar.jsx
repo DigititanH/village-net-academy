@@ -3,14 +3,15 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
 import { ChevronDown, Menu, X, ShoppingCart, User, LogOut, LayoutDashboard } from "lucide-react";
-import GlobalSearch from "./GlobalSearch";
-
 const navLinks = [
   { to: "/", label: "Home" },
-  { to: "/about", label: "About Us" },
-  { to: "/training-academy", label: "Training Academy" },
+  { to: "/courses", label: "Courses" },
+  { to: "/how-it-works", label: "How It Works" },
+  { to: "/training-academy", label: "Academies" },
   { to: "/shop", label: "Shop" },
-  { to: "/contact", label: "Contact Us" },
+  { to: "/impact", label: "Impact" },
+  { to: "/ambassadors", label: "Ambassadors" },
+  { to: "/contact", label: "Contact" },
 ];
 
 const courseLinks = [
@@ -19,7 +20,36 @@ const courseLinks = [
 ];
 
 const authBtnClass =
-  "inline-flex items-center justify-center text-sm font-bold px-5 py-2 min-w-[96px] rounded-xl bg-glossy-gradient hover:scale-105 transition-all duration-300 shadow-[0_0_22px_rgba(74,222,128,0.4)]";
+  "neon-btn inline-flex items-center justify-center text-sm font-bold px-5 py-2 min-w-[96px] rounded-xl";
+
+const linkClass =
+  "text-sm font-bold uppercase tracking-widest text-slate-800 hover:text-burnt-600 whitespace-nowrap transition duration-300";
+
+function NavItem({ item, onNavigate, className = linkClass }) {
+  if (item.hash) {
+    return (
+      <a
+        href={item.to}
+        className={className}
+        onClick={(e) => {
+          if (window.location.pathname === "/") {
+            e.preventDefault();
+            const id = item.to.split("#")[1];
+            document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+          }
+          onNavigate?.();
+        }}
+      >
+        {item.label}
+      </a>
+    );
+  }
+  return (
+    <Link to={item.to} className={className} onClick={onNavigate}>
+      {item.label}
+    </Link>
+  );
+}
 
 export default function Navbar() {
   const [open, setOpen] = useState(false);
@@ -57,92 +87,76 @@ export default function Navbar() {
     setOpen(false);
   };
 
+  const beforeCourses = navLinks.filter((l) => l.label === "Home");
+  const afterCourses = navLinks.filter((l) => l.label !== "Home" && l.label !== "Courses");
+
   return (
     <nav
       className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm"
       style={{ paddingTop: "env(safe-area-inset-top)" }}
     >
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,auto)_1fr_minmax(0,auto)] items-center gap-2 sm:gap-4 h-14 sm:h-20">
-          <Link to="/" className="flex items-center gap-2 sm:gap-3 shrink-0 min-w-0">
-            <img
-              src="/Village Netacad Programme (6).png"
-              alt="Village NetAcad"
-              className="h-9 sm:h-14 md:h-16 w-auto max-w-[88px] sm:max-w-none object-contain flex-shrink-0"
-            />
-            <div className="min-w-0">
-              <span className="font-display font-bold text-sm sm:text-base lg:text-lg tracking-wide leading-tight block truncate">
-                <span className="text-burnt-600">Village</span>{" "}
-                <span className="text-slate-800">NetAcad</span>
-              </span>
-              <p className="hidden sm:block text-[9px] tracking-wide text-slate-500 leading-tight">
-                Village NetAcad powered by Digititan
-              </p>
+      <div className="w-full px-3 sm:px-4 lg:px-6">
+        <div className="flex items-center justify-between gap-3 sm:gap-4 h-14 sm:h-20">
+          <div className="flex items-center gap-3 sm:gap-5 lg:gap-7 min-w-0 flex-1">
+            <Link to="/" className="flex items-center gap-2 sm:gap-3 shrink-0">
+              <img
+                src="/Village Netacad Programme (6).png"
+                alt="Village NetAcad"
+                className="h-9 sm:h-14 md:h-16 w-auto object-contain flex-shrink-0"
+              />
+              <div className="min-w-0 hidden sm:block">
+                <span className="font-display font-bold text-sm sm:text-base lg:text-lg tracking-wide leading-tight block truncate">
+                  <span className="text-burnt-600">Village</span>{" "}
+                  <span className="text-slate-800">NetAcad</span>
+                </span>
+                <p className="text-[10px] font-black tracking-wide text-slate-700 leading-tight">
+                  Village NetAcad powered by Digititan
+                </p>
+              </div>
+            </Link>
+
+            <div className="hidden lg:flex items-center justify-start gap-3 xl:gap-5 min-w-0">
+              {beforeCourses.map((l) => (
+                <NavItem key={l.label} item={l} />
+              ))}
+
+              <div className="relative" ref={coursesRef}>
+                <button
+                  type="button"
+                  onClick={() => setCoursesOpen((v) => !v)}
+                  className={`${linkClass} inline-flex items-center gap-1`}
+                  aria-expanded={coursesOpen}
+                  aria-haspopup="true"
+                >
+                  Courses
+                  <ChevronDown size={16} className={`transition-transform ${coursesOpen ? "rotate-180" : ""}`} />
+                </button>
+                {coursesOpen && (
+                  <div className="absolute left-0 top-full z-50 mt-3 w-52 rounded-xl border border-slate-200 bg-white py-2 shadow-lg">
+                    {courseLinks.map((item) => (
+                      <Link
+                        key={item.to}
+                        to={item.to}
+                        onClick={() => setCoursesOpen(false)}
+                        className="block px-4 py-2.5 text-sm font-bold text-slate-800 hover:bg-primary-50 hover:text-burnt-600 transition-colors"
+                      >
+                        {item.label}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {afterCourses.map((l) => (
+                <NavItem key={l.label} item={l} />
+              ))}
             </div>
-          </Link>
-
-          <div className="hidden md:flex items-center justify-center gap-6 lg:gap-8">
-            {navLinks.slice(0, 2).map((l) => (
-              <Link
-                key={l.label}
-                to={l.to}
-                className="text-sm font-semibold uppercase tracking-widest text-slate-800 hover:text-burnt-600 transition duration-300 whitespace-nowrap"
-              >
-                {l.label}
-              </Link>
-            ))}
-
-            <div className="relative" ref={coursesRef}>
-              <button
-                type="button"
-                onClick={() => setCoursesOpen((v) => !v)}
-                className="inline-flex items-center gap-1 text-sm font-semibold uppercase tracking-widest text-slate-800 hover:text-burnt-600 transition duration-300 whitespace-nowrap"
-                aria-expanded={coursesOpen}
-                aria-haspopup="true"
-              >
-                Courses
-                <ChevronDown size={16} className={`transition-transform ${coursesOpen ? "rotate-180" : ""}`} />
-              </button>
-              {coursesOpen && (
-                <div className="absolute left-1/2 top-full z-50 mt-3 w-48 -translate-x-1/2 rounded-xl border border-slate-200 bg-white py-2 shadow-lg">
-                  {courseLinks.map((item) => (
-                    <Link
-                      key={item.to}
-                      to={item.to}
-                      onClick={() => setCoursesOpen(false)}
-                      className="block px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-burnt-50 hover:text-burnt-700 transition-colors"
-                    >
-                      {item.label}
-                    </Link>
-                  ))}
-                  <Link
-                    to="/courses"
-                    onClick={() => setCoursesOpen(false)}
-                    className="block px-4 py-2.5 text-xs font-medium text-slate-500 hover:bg-slate-50 border-t border-slate-100 mt-1"
-                  >
-                    View all courses
-                  </Link>
-                </div>
-              )}
-            </div>
-
-            {navLinks.slice(2).map((l) => (
-              <Link
-                key={l.label}
-                to={l.to}
-                className="text-sm font-semibold uppercase tracking-widest text-slate-800 hover:text-burnt-600 transition duration-300 whitespace-nowrap"
-              >
-                {l.label}
-              </Link>
-            ))}
           </div>
 
-          <div className="flex items-center justify-end gap-1 sm:gap-3 col-start-2 md:col-start-auto">
-            <GlobalSearch />
-
+          <div className="flex items-center justify-end gap-1 sm:gap-3 shrink-0">
             <Link
               to="/cart"
-              className="p-2 rounded-xl hover:bg-slate-100 transition-colors relative text-slate-700 hover:text-burnt-600 flex-shrink-0"
+              className="p-2 rounded-xl hover:bg-slate-100 transition-colors relative text-slate-700 hover:text-primary-600 flex-shrink-0"
               aria-label="Cart"
             >
               <ShoppingCart size={18} />
@@ -169,13 +183,15 @@ export default function Navbar() {
                       <div className="px-4 py-2 border-b border-slate-100">
                         <p className="text-sm font-bold text-slate-900">{user.name}</p>
                         <p className="text-xs text-slate-500">{user.email}</p>
-                        <span className="inline-block mt-1 text-xs bg-burnt-100 text-burnt-700 px-2 py-0.5 rounded-full capitalize">{user.role}</span>
+                        <span className="inline-block mt-1 text-xs bg-primary-100 text-primary-700 px-2 py-0.5 rounded-full capitalize">
+                          {user.role}
+                        </span>
                       </div>
                       {dashPath && (
                         <Link
                           to={dashPath}
                           onClick={() => setMenuOpen(false)}
-                          className="flex items-center gap-2 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-burnt-600 transition-colors"
+                          className="flex items-center gap-2 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-primary-700 transition-colors"
                         >
                           <LayoutDashboard size={16} /> Dashboard
                         </Link>
@@ -183,7 +199,7 @@ export default function Navbar() {
                       <Link
                         to="/my-orders"
                         onClick={() => setMenuOpen(false)}
-                        className="flex items-center gap-2 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-burnt-600 transition-colors"
+                        className="flex items-center gap-2 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-primary-700 transition-colors"
                       >
                         <User size={16} /> My Orders
                       </Link>
@@ -204,7 +220,11 @@ export default function Navbar() {
               )}
             </div>
 
-            <button type="button" onClick={() => setOpen(!open)} className="md:hidden p-2 rounded-xl hover:bg-slate-100 text-slate-700 flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => setOpen(!open)}
+              className="lg:hidden p-2 rounded-xl hover:bg-slate-100 text-slate-700 flex-shrink-0"
+            >
               {open ? <X size={20} /> : <Menu size={20} />}
             </button>
           </div>
@@ -212,23 +232,21 @@ export default function Navbar() {
       </div>
 
       {open && (
-        <div className="md:hidden border-t border-slate-200 bg-white px-4 py-4 space-y-2">
-          {navLinks.slice(0, 2).map((l) => (
-            <Link
+        <div className="lg:hidden border-t border-slate-200 bg-white px-4 py-4 space-y-2">
+          {beforeCourses.map((l) => (
+            <NavItem
               key={l.label}
-              to={l.to}
-              onClick={() => setOpen(false)}
-              className="block py-2 text-sm font-semibold text-slate-800 hover:text-burnt-600 transition-colors uppercase tracking-wider"
-            >
-              {l.label}
-            </Link>
+              item={l}
+              onNavigate={() => setOpen(false)}
+              className="block py-2 text-sm font-bold text-slate-800 hover:text-burnt-600 uppercase tracking-wider transition-colors"
+            />
           ))}
 
           <div>
             <button
               type="button"
               onClick={() => setMobileCoursesOpen((v) => !v)}
-              className="w-full flex items-center justify-between py-2 text-sm font-semibold text-slate-800 uppercase tracking-wider"
+              className="w-full flex items-center justify-between py-2 text-sm font-bold text-slate-800 uppercase tracking-wider"
             >
               Courses
               <ChevronDown size={16} className={`transition-transform ${mobileCoursesOpen ? "rotate-180" : ""}`} />
@@ -243,34 +261,22 @@ export default function Navbar() {
                       setOpen(false);
                       setMobileCoursesOpen(false);
                     }}
-                    className="block py-2 text-sm font-medium text-slate-600 hover:text-burnt-600"
+                    className="block py-2 text-sm font-bold text-slate-800 hover:text-burnt-600"
                   >
                     {item.label}
                   </Link>
                 ))}
-                <Link
-                  to="/courses"
-                  onClick={() => {
-                    setOpen(false);
-                    setMobileCoursesOpen(false);
-                  }}
-                  className="block py-2 text-sm text-slate-500 hover:text-burnt-600"
-                >
-                  View all courses
-                </Link>
               </div>
             )}
           </div>
 
-          {navLinks.slice(2).map((l) => (
-            <Link
+          {afterCourses.map((l) => (
+            <NavItem
               key={l.label}
-              to={l.to}
-              onClick={() => setOpen(false)}
-              className="block py-2 text-sm font-semibold text-slate-800 hover:text-burnt-600 transition-colors uppercase tracking-wider"
-            >
-              {l.label}
-            </Link>
+              item={l}
+              onNavigate={() => setOpen(false)}
+              className="block py-2 text-sm font-bold text-slate-800 hover:text-burnt-600 uppercase tracking-wider transition-colors"
+            />
           ))}
           <div className="pt-2 space-y-2">
             {user ? (
@@ -294,7 +300,7 @@ export default function Navbar() {
                 <button
                   type="button"
                   onClick={handleLogout}
-                  className="w-full text-sm text-center py-2 rounded-xl bg-glossy-gradient font-bold text-white"
+                  className="w-full text-sm text-center py-2 rounded-xl neon-btn font-bold"
                 >
                   Logout
                 </button>
@@ -303,7 +309,7 @@ export default function Navbar() {
               <Link
                 to="/login"
                 onClick={() => setOpen(false)}
-                className="block text-sm text-center py-2 rounded-xl bg-glossy-gradient font-bold text-white"
+                className="block text-sm text-center py-2 rounded-xl neon-btn font-bold"
               >
                 Login
               </Link>

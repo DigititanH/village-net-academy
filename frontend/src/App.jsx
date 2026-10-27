@@ -13,6 +13,9 @@ import Shop from "./pages/Shop";
 import ProductDetail from "./pages/ProductDetail";
 import Contact from "./pages/Contact";
 import Career from "./pages/Career";
+import Ambassadors from "./pages/Ambassadors";
+import HowItWorks from "./pages/HowItWorks";
+import Impact from "./pages/Impact";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
@@ -79,6 +82,9 @@ export default function App() {
           <Route path="/shop/:slug" element={<ProductDetail />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/career" element={<Career />} />
+          <Route path="/ambassadors" element={<Ambassadors />} />
+          <Route path="/how-it-works" element={<HowItWorks />} />
+          <Route path="/impact" element={<Impact />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/verify-email" element={<VerifyEmail />} />

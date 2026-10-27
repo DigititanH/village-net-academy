@@ -2,6 +2,33 @@ import { useEffect, useState } from "react";
 import { Plus, Pencil, Trash2, X, Image as ImageIcon, Replace } from "lucide-react";
 import api from "../../lib/api";
 import toast from "react-hot-toast";
+import { FONT_OPTIONS, FONT_STYLE_OPTIONS, fontStyleFor } from "../../lib/heroFonts";
+
+function FontField({ label, font, style, onFontChange, onStyleChange, previewColor, previewText }) {
+  return (
+    <div className="rounded-xl border border-white/10 p-3 space-y-2">
+      <p className="text-sm text-gray-400">{label}</p>
+      <div className="grid sm:grid-cols-2 gap-2">
+        <select className="select-field-sm w-full" value={font} onChange={(e) => onFontChange(e.target.value)}>
+          {FONT_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+        <select className="select-field-sm w-full" value={style} onChange={(e) => onStyleChange(e.target.value)}>
+          {FONT_STYLE_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+      </div>
+      <p
+        className="rounded-lg bg-black/50 px-3 py-2 text-lg truncate"
+        style={{ ...fontStyleFor(font, style), color: previewColor || "#FFFFFF" }}
+      >
+        {previewText || "Preview text"}
+      </p>
+    </div>
+  );
+}
 
 const emptySlide = {
   alt_text: "",
@@ -16,6 +43,10 @@ const emptySlide = {
   title_highlight_color: "",
   subtitle_color: "#F5F5F5",
   body_color: "#E5E5E5",
+  title_font: "display",
+  title_style: "bold",
+  text_font: "sans",
+  text_style: "normal",
   sort_order: "",
   is_active: "1",
 };
@@ -136,6 +167,10 @@ export default function AdminHero() {
       title_highlight_color: slide.title_highlight_color || "",
       subtitle_color: slide.subtitle_color || "#F5F5F5",
       body_color: slide.body_color || "#E5E5E5",
+      title_font: slide.title_font || "display",
+      title_style: slide.title_style || "bold",
+      text_font: slide.text_font || "sans",
+      text_style: slide.text_style || "normal",
       sort_order: String(slide.sort_order ?? ""),
       is_active: String(slide.is_active ?? 1),
     });
@@ -184,7 +219,11 @@ export default function AdminHero() {
       applyHero(res.data.hero);
       clearPickedImage();
       setShowSlideModal(false);
-      toast.success(editingSlide ? (image ? "Slide image replaced" : "Slide updated") : "Slide added");
+      if (res.data.warning) {
+        toast.error(res.data.warning, { duration: 10000 });
+      } else {
+        toast.success(editingSlide ? (image ? "Slide image replaced" : "Slide updated") : "Slide added");
+      }
     } catch (err) {
       toast.error(err.response?.data?.message || "Failed to save slide");
     } finally {
@@ -308,8 +347,9 @@ export default function AdminHero() {
           <h1 className="text-2xl font-black mb-2 bg-gradient-to-r from-burnt-400 to-primary-400 bg-clip-text text-transparent">
             Homepage Hero
           </h1>
-          <p className="text-sm text-gray-400">
-            Each slide has its own messages and centered buttons shown on the slideshow.
+          <p className="text-sm text-gray-400 max-w-2xl">
+            Control the homepage hero: slide images rotate in the photo panel; each slide’s label, title, subtitle and
+            buttons appear in the text panel as that slide is shown. Hide a slide to remove it from the loop.
           </p>
         </div>
         <button type="button" onClick={openNewSlide} className="btn-primary rounded-xl px-4 py-2 inline-flex items-center gap-2 text-sm">
@@ -538,6 +578,24 @@ export default function AdminHero() {
                 label="Body color"
                 value={slideForm.body_color}
                 onChange={(v) => setSlideForm({ ...slideForm, body_color: v })}
+              />
+              <FontField
+                label="Title font and style"
+                font={slideForm.title_font}
+                style={slideForm.title_style}
+                onFontChange={(v) => setSlideForm({ ...slideForm, title_font: v })}
+                onStyleChange={(v) => setSlideForm({ ...slideForm, title_style: v })}
+                previewColor={slideForm.title_color}
+                previewText={slideForm.title || "Title preview"}
+              />
+              <FontField
+                label="Label, subtitle and body font and style"
+                font={slideForm.text_font}
+                style={slideForm.text_style}
+                onFontChange={(v) => setSlideForm({ ...slideForm, text_font: v })}
+                onStyleChange={(v) => setSlideForm({ ...slideForm, text_style: v })}
+                previewColor={slideForm.subtitle_color}
+                previewText={slideForm.subtitle || "Subtitle preview"}
               />
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Wording position on slide</label>

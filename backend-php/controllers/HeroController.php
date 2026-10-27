@@ -44,6 +44,41 @@ class HeroController
         ];
     }
 
+    private const FONTS = ['display', 'sans', 'serif', 'mono', 'system'];
+    private const FONT_STYLES = ['normal', 'bold', 'italic', 'bold-italic'];
+    private const STYLE_WARNING = 'Text saved, but colours and fonts could not be stored because the database is missing the styling columns. Import UPGRADE-LIVE-VIA-PHPMYADMIN.sql in phpMyAdmin, then save again.';
+
+    private static function fontDefaults(): array
+    {
+        return [
+            'title_font' => 'display',
+            'title_style' => 'bold',
+            'text_font' => 'sans',
+            'text_style' => 'normal',
+        ];
+    }
+
+    private static function normalizeFont(mixed $value, string $fallback): string
+    {
+        $font = strtolower(trim((string) $value));
+        return in_array($font, self::FONTS, true) ? $font : $fallback;
+    }
+
+    private static function normalizeFontStyle(mixed $value, string $fallback): string
+    {
+        $style = strtolower(trim((string) $value));
+        return in_array($style, self::FONT_STYLES, true) ? $style : $fallback;
+    }
+
+    /** Resolve one font field from request body, falling back to the stored slide value. */
+    private static function fontField(array $body, ?array $slide, string $key): string
+    {
+        $default = self::fontDefaults()[$key];
+        $isStyle = str_ends_with($key, '_style');
+        $raw = array_key_exists($key, $body) ? $body[$key] : ($slide[$key] ?? null);
+        return $isStyle ? self::normalizeFontStyle($raw, $default) : self::normalizeFont($raw, $default);
+    }
+
     private static function defaults(): array
     {
         return [
@@ -133,29 +168,28 @@ class HeroController
         self::ensureSeeded();
         SchemaEnsure::heroSlides();
 
+        $base = 'id, image_url, alt_text, label, title, title_highlight, subtitle, body';
         $colorCols = 'label_color, title_color, title_highlight_color, subtitle_color, body_color';
-        try {
-            $sql = "SELECT id, image_url, alt_text, label, title, title_highlight, subtitle, body, text_position, {$colorCols}, sort_order, is_active FROM hero_slides";
-            if ($activeOnly) {
-                $sql .= ' WHERE is_active = 1';
-            }
-            $sql .= ' ORDER BY sort_order ASC, id ASC';
-            $slides = Database::queryAll($sql);
-        } catch (Throwable $e) {
+        $fontCols = 'title_font, title_style, text_font, text_style';
+        $where = $activeOnly ? ' WHERE is_active = 1' : '';
+        $order = ' ORDER BY sort_order ASC, id ASC';
+
+        // Older live databases may lack newer columns; try the richest select first.
+        $columnSets = [
+            "{$base}, text_position, {$colorCols}, {$fontCols}",
+            "{$base}, text_position, {$colorCols}",
+            "{$base}, text_position",
+            $base,
+        ];
+        $slides = [];
+        foreach ($columnSets as $i => $cols) {
             try {
-                $sql = 'SELECT id, image_url, alt_text, label, title, title_highlight, subtitle, body, text_position, sort_order, is_active FROM hero_slides';
-                if ($activeOnly) {
-                    $sql .= ' WHERE is_active = 1';
+                $slides = Database::queryAll("SELECT {$cols}, sort_order, is_active FROM hero_slides" . $where . $order);
+                break;
+            } catch (Throwable $e) {
+                if ($i === count($columnSets) - 1) {
+                    throw $e;
                 }
-                $sql .= ' ORDER BY sort_order ASC, id ASC';
-                $slides = Database::queryAll($sql);
-            } catch (Throwable $e2) {
-                $sql = 'SELECT id, image_url, alt_text, label, title, title_highlight, subtitle, body, sort_order, is_active FROM hero_slides';
-                if ($activeOnly) {
-                    $sql .= ' WHERE is_active = 1';
-                }
-                $sql .= ' ORDER BY sort_order ASC, id ASC';
-                $slides = Database::queryAll($sql);
             }
         }
 
@@ -178,7 +212,8 @@ class HeroController
         }
 
         $defaults = self::colorDefaults();
-        $mappedSlides = array_map(static function (array $s) use ($buttonsBySlide, $defaults): array {
+        $fontDefaults = self::fontDefaults();
+        $mappedSlides = array_map(static function (array $s) use ($buttonsBySlide, $defaults, $fontDefaults): array {
             $id = (int) $s['id'];
             return [
                 'id' => $id,
@@ -197,6 +232,10 @@ class HeroController
                 'title_highlight_color' => self::normalizeColor($s['title_highlight_color'] ?? null, $defaults['title_highlight_color']),
                 'subtitle_color' => self::normalizeColor($s['subtitle_color'] ?? null, $defaults['subtitle_color']),
                 'body_color' => self::normalizeColor($s['body_color'] ?? null, $defaults['body_color']),
+                'title_font' => self::normalizeFont($s['title_font'] ?? null, $fontDefaults['title_font']),
+                'title_style' => self::normalizeFontStyle($s['title_style'] ?? null, $fontDefaults['title_style']),
+                'text_font' => self::normalizeFont($s['text_font'] ?? null, $fontDefaults['text_font']),
+                'text_style' => self::normalizeFontStyle($s['text_style'] ?? null, $fontDefaults['text_style']),
                 'sort_order' => (int) ($s['sort_order'] ?? 0),
                 'is_active' => (int) ($s['is_active'] ?? 1),
                 'buttons' => $buttonsBySlide[$id] ?? [],
@@ -260,13 +299,21 @@ class HeroController
 
         SchemaEnsure::heroSlides();
 
+        $titleFont = self::fontField($_POST, null, 'title_font');
+        $titleStyle = self::fontField($_POST, null, 'title_style');
+        $textFont = self::fontField($_POST, null, 'text_font');
+        $textStyle = self::fontField($_POST, null, 'text_style');
+
+        $warning = null;
         try {
             $result = Database::queryRun(
-                'INSERT INTO hero_slides (image_url, alt_text, label, title, title_highlight, subtitle, body, text_position, label_color, title_color, title_highlight_color, subtitle_color, body_color, sort_order, is_active)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                [$imageUrl, $alt, $label, $title, $titleHighlight, $subtitle, $bodyText, $textPosition, $labelColor, $titleColor, $titleHighlightColor, $subtitleColor, $bodyColor, $sortOrder, $isActive ? 1 : 0]
+                'INSERT INTO hero_slides (image_url, alt_text, label, title, title_highlight, subtitle, body, text_position, label_color, title_color, title_highlight_color, subtitle_color, body_color, title_font, title_style, text_font, text_style, sort_order, is_active)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [$imageUrl, $alt, $label, $title, $titleHighlight, $subtitle, $bodyText, $textPosition, $labelColor, $titleColor, $titleHighlightColor, $subtitleColor, $bodyColor, $titleFont, $titleStyle, $textFont, $textStyle, $sortOrder, $isActive ? 1 : 0]
             );
         } catch (Throwable $e) {
+            error_log('[HeroController] createSlide styled insert failed: ' . $e->getMessage());
+            $warning = self::STYLE_WARNING;
             $result = Database::queryRun(
                 'INSERT INTO hero_slides (image_url, alt_text, label, title, title_highlight, subtitle, body, text_position, sort_order, is_active)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -276,6 +323,7 @@ class HeroController
 
         Response::json([
             'message' => 'Slide added',
+            'warning' => $warning,
             'id' => $result['lastInsertRowid'] ?? null,
             'hero' => self::loadPayload(false),
         ], 201);
@@ -338,12 +386,20 @@ class HeroController
 
         SchemaEnsure::heroSlides();
 
+        $titleFont = self::fontField($body, $slide, 'title_font');
+        $titleStyle = self::fontField($body, $slide, 'title_style');
+        $textFont = self::fontField($body, $slide, 'text_font');
+        $textStyle = self::fontField($body, $slide, 'text_style');
+
+        $warning = null;
         try {
             Database::queryRun(
-                'UPDATE hero_slides SET image_url = ?, alt_text = ?, label = ?, title = ?, title_highlight = ?, subtitle = ?, body = ?, text_position = ?, label_color = ?, title_color = ?, title_highlight_color = ?, subtitle_color = ?, body_color = ?, sort_order = ?, is_active = ? WHERE id = ?',
-                [$imageUrl, $alt, $label, $title, $titleHighlight, $subtitle, $bodyText, $textPosition, $labelColor, $titleColor, $titleHighlightColor, $subtitleColor, $bodyColor, $sortOrder, $isActive ? 1 : 0, $id]
+                'UPDATE hero_slides SET image_url = ?, alt_text = ?, label = ?, title = ?, title_highlight = ?, subtitle = ?, body = ?, text_position = ?, label_color = ?, title_color = ?, title_highlight_color = ?, subtitle_color = ?, body_color = ?, title_font = ?, title_style = ?, text_font = ?, text_style = ?, sort_order = ?, is_active = ? WHERE id = ?',
+                [$imageUrl, $alt, $label, $title, $titleHighlight, $subtitle, $bodyText, $textPosition, $labelColor, $titleColor, $titleHighlightColor, $subtitleColor, $bodyColor, $titleFont, $titleStyle, $textFont, $textStyle, $sortOrder, $isActive ? 1 : 0, $id]
             );
         } catch (Throwable $e) {
+            error_log('[HeroController] updateSlide styled update failed: ' . $e->getMessage());
+            $warning = self::STYLE_WARNING;
             Database::queryRun(
                 'UPDATE hero_slides SET image_url = ?, alt_text = ?, label = ?, title = ?, title_highlight = ?, subtitle = ?, body = ?, text_position = ?, sort_order = ?, is_active = ? WHERE id = ?',
                 [$imageUrl, $alt, $label, $title, $titleHighlight, $subtitle, $bodyText, $textPosition, $sortOrder, $isActive ? 1 : 0, $id]
@@ -354,7 +410,7 @@ class HeroController
             self::deleteUploadFile($slide['image_url']);
         }
 
-        Response::json(['message' => 'Slide updated', 'hero' => self::loadPayload(false)]);
+        Response::json(['message' => 'Slide updated', 'warning' => $warning, 'hero' => self::loadPayload(false)]);
     }
 
     public static function deleteSlide(array $params): void

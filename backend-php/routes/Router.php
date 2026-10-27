@@ -49,6 +49,15 @@ class Router
         self::get('/api/auth/me', [AuthController::class, 'me']);
         self::post('/api/auth/logout', [AuthController::class, 'logout']);
 
+        // Mustek dealer feed (admin)
+        self::get('/api/mustek/status', [MustekController::class, 'status']);
+        self::get('/api/mustek/image', [MustekController::class, 'image']);
+        self::get('/api/mustek/catalog', [MustekController::class, 'catalog']);
+        self::post('/api/mustek/import', [MustekController::class, 'import']);
+        self::post('/api/mustek/sync', [MustekController::class, 'sync']);
+        self::get('/api/cron/mustek-sync', [MustekController::class, 'cron']);
+        self::post('/api/cron/mustek-sync', [MustekController::class, 'cron']);
+
         // Products
         self::get('/api/products/meta/categories', [ProductsController::class, 'categories']);
         self::get('/api/products/admin/all', [ProductsController::class, 'adminIndex']);

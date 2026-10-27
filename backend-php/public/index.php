@@ -96,6 +96,7 @@ if ($method === 'GET' && !preg_match('#^/(api|uploads|health)(/|$)#', $path)) {
                 'json' => 'application/json', 'svg' => 'image/svg+xml', 'ico' => 'image/x-icon',
                 'png' => 'image/png', 'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg',
                 'webp' => 'image/webp', 'woff2' => 'font/woff2',
+                'pdf' => 'application/pdf',
             ];
             header('Content-Type: ' . ($types[$ext] ?? 'application/octet-stream'));
             readfile($file);

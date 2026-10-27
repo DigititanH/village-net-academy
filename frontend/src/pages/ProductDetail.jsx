@@ -1,12 +1,21 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { ShoppingCart, Heart, Star, Send } from "lucide-react";
-import api from "../lib/api";
-import { parseProductOptions, stockForColor, colorSwatchHex, parseColorStock } from "../lib/productOptions";
+import api, { productImageUrl } from "../lib/api";
+import {
+  parseProductOptions,
+  stockForColor,
+  colorSwatchHex,
+  parseColorStock,
+  productOptionNames,
+  priceForOption,
+  optionLabel,
+} from "../lib/productOptions";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import toast from "react-hot-toast";
 import { productTypeLabel } from "../lib/productTypes";
+import { formatRand, vatFromInclusive, vatPercentLabel } from "../lib/vat";
 
 export default function ProductDetail() {
   const { slug } = useParams();
@@ -22,14 +31,15 @@ export default function ProductDetail() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
     const load = async () => {
+      setLoading(true);
+      setProduct(null);
       try {
-        const res = await api.get(`/products/${slug}`);
+        const res = await api.get(`/products/${encodeURIComponent(slug)}`);
+        if (cancelled) return;
         setProduct(res.data);
-        const reviewRes = await api.get(`/reviews/product/${res.data.id}`);
-        setReviews(Array.isArray(reviewRes.data) ? reviewRes.data : []);
-        const isApparel = String(res.data.category_slug || "").toLowerCase() === "merchandise";
-        const nextSizes = isApparel ? parseProductOptions(res.data.sizes) : [];
+        const nextSizes = productOptionNames(res.data);
         const fromColors = parseProductOptions(res.data.colors);
         const fromStock = parseColorStock(res.data.color_stock, null).map((r) => r.name);
         const seen = new Set();
@@ -43,16 +53,31 @@ export default function ProductDetail() {
         if (nextSizes.length) setSize(nextSizes[0]);
         if (nextColors.length) setColor(nextColors[0]);
         setQty(1);
-      } catch { /* empty */ }
-      setLoading(false);
+        try {
+          const reviewRes = await api.get(`/reviews/product/${res.data.id}`);
+          if (!cancelled) {
+            setReviews(Array.isArray(reviewRes.data) ? reviewRes.data : []);
+          }
+        } catch {
+          if (!cancelled) setReviews([]);
+        }
+      } catch {
+        if (!cancelled) {
+          setProduct(null);
+          toast.error("Could not load this product. Please try again.");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     };
     load();
+    return () => {
+      cancelled = true;
+    };
   }, [slug]);
 
-  const sizes =
-    product && String(product.category_slug || "").toLowerCase() === "merchandise"
-      ? parseProductOptions(product.sizes)
-      : [];
+  const sizes = product ? productOptionNames(product) : [];
+  const sizeLabel = product ? optionLabel(product) : "Size";
   const colors = product
     ? (() => {
         const fromColors = parseProductOptions(product.colors);
@@ -73,7 +98,7 @@ export default function ProductDetail() {
   const handleAdd = async () => {
     try {
       if (sizes.length && !size) {
-        toast.error("Please select a size");
+        toast.error(`Please select a ${sizeLabel.toLowerCase()}`);
         return;
       }
       if (colors.length && !color) {
@@ -117,13 +142,22 @@ export default function ProductDetail() {
   if (!product) return <div className="text-center py-20"><p className="text-gray-500 text-lg">Product not found.</p></div>;
 
   const avgRating = reviews.length ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1) : "0";
+  const unitPrice = priceForOption(product, size);
+  const unitVat = vatFromInclusive(unitPrice);
+  const lineVat = vatFromInclusive(unitPrice * qty);
 
   return (
     <div className="section-padding">
       <div className="max-w-7xl mx-auto">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
           <div className="aspect-square glass rounded-[2rem] overflow-hidden">
-            {product.image ? <img src={product.image} alt={product.name} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-gray-600"><ShoppingCart size={80} /></div>}
+            {product.image ? (
+              <img src={productImageUrl(product.image)} alt={product.name} className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-gray-600">
+                <ShoppingCart size={80} />
+              </div>
+            )}
           </div>
 
           <div>
@@ -137,16 +171,34 @@ export default function ProductDetail() {
               <div className="flex gap-0.5">{[...Array(5)].map((_, i) => <Star key={i} size={16} className={i < Math.round(avgRating) ? "fill-yellow-400 text-yellow-400" : "text-gray-600"} />)}</div>
               <span className="text-sm text-gray-400">{avgRating} ({reviews.length} reviews)</span>
             </div>
-            <div className="flex items-center gap-3 mb-6">
-              <span className="text-4xl font-black text-burnt-600">R{Number(product.price).toFixed(2)}</span>
-              {product.compare_price && <span className="text-lg text-gray-500 line-through">R{Number(product.compare_price).toFixed(2)}</span>}
+            <div className="mb-6 rounded-2xl border border-white/10 bg-white/5 p-4 space-y-2 max-w-md">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm text-gray-400">Price excl. VAT</span>
+                <span className="font-semibold text-gray-200">{formatRand(unitVat.excl)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm text-gray-400">VAT ({vatPercentLabel()})</span>
+                <span className="font-semibold text-gray-200">{formatRand(unitVat.vat)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3 pt-2 border-t border-white/10">
+                <span className="text-sm font-bold text-white">Total incl. VAT</span>
+                <span className="text-2xl font-black text-burnt-600">{formatRand(unitVat.total)}</span>
+              </div>
+              {qty > 1 ? (
+                <p className="text-xs text-gray-500 pt-1">
+                  For qty {qty}: {formatRand(lineVat.excl)} excl. + {formatRand(lineVat.vat)} VAT = {formatRand(lineVat.total)}
+                </p>
+              ) : null}
+              {product.compare_price ? (
+                <p className="text-sm text-gray-500 line-through">{formatRand(product.compare_price)}</p>
+              ) : null}
             </div>
 
             {product.description && <p className="text-gray-400 mb-6 leading-8">{product.description}</p>}
 
             {sizes.length > 0 && (
               <div className="mb-4">
-                <label className="block text-sm font-semibold mb-2 text-gray-300">Size</label>
+                <label className="block text-sm font-semibold mb-2 text-gray-300">{sizeLabel}</label>
                 <div className="flex gap-2 flex-wrap">
                   {sizes.map((s) => (
                     <button

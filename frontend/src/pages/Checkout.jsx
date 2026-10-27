@@ -6,8 +6,9 @@ import api from "../lib/api";
 import { SITE_EMAIL } from "../lib/site";
 import { redirectToPayFast } from "../lib/payfast";
 import { getReferralCode, setReferralCode } from "../lib/referral";
-import { parseProductOptions } from "../lib/productOptions";
+import { parseProductOptions, productOptionNames, optionLabel } from "../lib/productOptions";
 import { SA_PROVINCES } from "../data/ascCentres";
+import { formatRand, vatFromInclusive, vatPercentLabel } from "../lib/vat";
 import toast from "react-hot-toast";
 
 const DELIVERY_FEE = 150;
@@ -24,6 +25,7 @@ export default function Checkout() {
   const [loading, setLoading] = useState(false);
 
   const shippingFee = deliveryMethod === "delivery" ? DELIVERY_FEE : deliveryMethod === "collection" ? 0 : null;
+  const goodsVat = useMemo(() => vatFromInclusive(total), [total]);
   const grandTotal = useMemo(
     () => (shippingFee === null ? total : total + shippingFee),
     [total, shippingFee]
@@ -66,8 +68,8 @@ export default function Checkout() {
     if (!items.length) return toast.error("Cart is empty");
     if (!deliveryMethod) return toast.error("Please choose Delivery or Collection at the centre");
 
-    const missingSize = items.find((i) => parseProductOptions(i.available_sizes).length > 0 && !i.size);
-    if (missingSize) return toast.error(`Please select a size for "${missingSize.name}" in your cart`);
+    const missingSize = items.find((i) => productOptionNames(i).length > 0 && !i.size);
+    if (missingSize) return toast.error(`Please select a ${optionLabel(missingSize).toLowerCase()} for "${missingSize.name}" in your cart`);
 
     const missingColor = items.find((i) => {
       const colors = parseProductOptions(i.available_colors || i.colors);
@@ -148,7 +150,10 @@ export default function Checkout() {
                   <Truck size={18} className="text-burnt-400" /> Delivery
                 </div>
                 <p className="text-sm text-gray-400">We deliver to your address</p>
-                <p className="mt-2 font-black text-burnt-500">R{DELIVERY_FEE.toFixed(2)}</p>
+                <p className="mt-2 font-black text-burnt-500">
+                  Standard fee {formatRand(DELIVERY_FEE)}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">No VAT on delivery</p>
               </button>
               <button
                 type="button"
@@ -294,8 +299,12 @@ export default function Checkout() {
             </div>
             <div className="border-t border-white/10 pt-4 space-y-2">
               <div className="flex justify-between gap-3 text-sm">
-                <span className="text-gray-400">Subtotal</span>
-                <span className="shrink-0">R{total.toFixed(2)}</span>
+                <span className="text-gray-400">Subtotal excl. VAT</span>
+                <span className="shrink-0">{formatRand(goodsVat.excl)}</span>
+              </div>
+              <div className="flex justify-between gap-3 text-sm">
+                <span className="text-gray-400">VAT on goods ({vatPercentLabel()})</span>
+                <span className="shrink-0">{formatRand(goodsVat.vat)}</span>
               </div>
               <div className="flex justify-between gap-3 text-sm">
                 <span className="text-gray-400 min-w-0 break-words">
@@ -304,16 +313,20 @@ export default function Checkout() {
                       ? `Collection — ${selectedCentre.name}`
                       : "Collection"
                     : deliveryMethod === "delivery"
-                      ? "Delivery"
+                      ? "Standard delivery (no VAT)"
                       : "Delivery / collection"}
                 </span>
                 <span className="shrink-0">
-                  {shippingFee === null ? "Select above" : shippingFee === 0 ? "Free" : `R${shippingFee.toFixed(2)}`}
+                  {shippingFee === null
+                    ? "Select above"
+                    : shippingFee === 0
+                      ? "Free"
+                      : formatRand(shippingFee)}
                 </span>
               </div>
               <div className="flex justify-between gap-3 pt-2">
-                <span className="text-lg font-bold">Total</span>
-                <span className="text-xl font-black text-burnt-600 shrink-0">R{grandTotal.toFixed(2)}</span>
+                <span className="text-lg font-bold">Total payable</span>
+                <span className="text-xl font-black text-burnt-600 shrink-0">{formatRand(grandTotal)}</span>
               </div>
             </div>
           </div>

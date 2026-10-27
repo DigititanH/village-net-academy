@@ -55,7 +55,7 @@ export default function DashboardLayout({ role, children }) {
             <img src="/Village Netacad Programme (6).png" alt="Village Netacad" className="h-14 w-auto object-contain flex-shrink-0 rounded-xl" />
             <div className="min-w-0">
               <span className="font-bold text-sm bg-gradient-to-r from-burnt-400 to-primary-400 bg-clip-text text-transparent block leading-tight">Village NetAcad</span>
-              <span className="text-[9px] text-burnt-200/60 block leading-tight">Village NetAcad powered by Digititan</span>
+              <span className="text-[10px] font-black text-burnt-100/90 block leading-tight">Village NetAcad powered by Digititan</span>
             </div>
           </Link>
           <button onClick={() => setSidebarOpen(false)} className="lg:hidden p-1 text-gray-400 hover:text-white"><X size={18} /></button>

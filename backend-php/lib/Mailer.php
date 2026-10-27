@@ -94,8 +94,11 @@ class Mailer
         }
         stream_set_timeout($socket, 30);
 
+        $fromDomain = substr(strrchr($cfg['fromAddress'], '@') ?: '@localhost', 1);
+        $ehlo = 'EHLO ' . ($fromDomain !== '' ? $fromDomain : 'localhost');
+
         self::expect($socket, [220]);
-        self::command($socket, 'EHLO localhost', [250]);
+        self::command($socket, $ehlo, [250]);
 
         if ($cfg['encryption'] === 'tls') {
             self::command($socket, 'STARTTLS', [220]);
@@ -106,7 +109,7 @@ class Mailer
             if (!stream_socket_enable_crypto($socket, true, $crypto)) {
                 throw new RuntimeException('STARTTLS negotiation failed');
             }
-            self::command($socket, 'EHLO localhost', [250]);
+            self::command($socket, $ehlo, [250]);
         }
 
         self::command($socket, 'AUTH LOGIN', [334]);
@@ -119,6 +122,7 @@ class Mailer
 
         $headers = [
             'Date: ' . date('r'),
+            'Message-ID: <' . bin2hex(random_bytes(16)) . '@' . $fromDomain . '>',
             'From: ' . self::formatAddress($cfg['fromName'], $cfg['fromAddress']),
             'To: <' . $cfg['to'] . '>',
             'Subject: ' . self::encodeHeader($cfg['subject']),

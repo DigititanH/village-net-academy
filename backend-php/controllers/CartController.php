@@ -7,11 +7,39 @@ class CartController
         Auth::authenticate();
         SchemaEnsure::products();
         SchemaEnsure::cartAndOrderItems();
-        Response::json(Database::queryAll(
-            'SELECT c.*, p.name, p.price, p.image, p.stock, p.sizes as available_sizes, p.colors as available_colors, p.color_stock
-             FROM cart c JOIN products p ON c.product_id = p.id WHERE c.user_id = ?',
+        $rows = Database::queryAll(
+            'SELECT c.*, p.name, p.price, p.image, p.stock, p.sizes as available_sizes, p.colors as available_colors, p.color_stock,
+                    cat.slug as category_slug
+             FROM cart c
+             JOIN products p ON c.product_id = p.id
+             LEFT JOIN categories cat ON cat.id = p.category_id
+             WHERE c.user_id = ?',
             [Auth::$user['id']]
-        ));
+        );
+        foreach ($rows as &$row) {
+            $row['base_price'] = $row['price'];
+            $row['price'] = ProductOptions::priceFor($row['available_sizes'] ?? null, $row['size'] ?? null, (float) $row['price']);
+        }
+        unset($row);
+        Response::json($rows);
+    }
+
+    /** Validate a chosen size/capacity against the product's options; returns the canonical name. */
+    private static function resolveOption(?string $sizesRaw, mixed $size, string $productName): ?string
+    {
+        $map = ProductOptions::decode($sizesRaw);
+        $size = $size !== null ? trim((string) $size) : '';
+        if (!$map) {
+            return $size !== '' ? $size : null;
+        }
+        if ($size === '') {
+            return null;
+        }
+        $name = ProductOptions::match($map, $size);
+        if ($name === null) {
+            Response::error($productName . ' is not available in ' . $size, 400);
+        }
+        return $name;
     }
 
     public static function add(): void
@@ -29,12 +57,13 @@ class CartController
         }
 
         $product = Database::queryGet(
-            'SELECT id, name, stock, colors, color_stock FROM products WHERE id = ? AND is_active = 1',
+            'SELECT id, name, stock, sizes, colors, color_stock FROM products WHERE id = ? AND is_active = 1',
             [$productId]
         );
         if (!$product) {
             Response::error('Product not found', 404);
         }
+        $size = self::resolveOption($product['sizes'] ?? null, $size, (string) $product['name']);
 
         $colorMap = ColorStock::decode($product['color_stock'] ?? null);
         $colorNames = $colorMap
@@ -102,13 +131,16 @@ class CartController
         $size = $body['size'] ?? null;
 
         $row = Database::queryGet(
-            'SELECT c.*, p.name, p.stock, p.colors, p.color_stock
+            'SELECT c.*, p.name, p.stock, p.sizes as available_sizes, p.colors, p.color_stock
              FROM cart c JOIN products p ON p.id = c.product_id
              WHERE c.id = ? AND c.user_id = ?',
             [$params['id'], Auth::$user['id']]
         );
         if (!$row) {
             Response::error('Cart item not found', 404);
+        }
+        if (array_key_exists('size', $body)) {
+            $size = self::resolveOption($row['available_sizes'] ?? null, $size, (string) $row['name']);
         }
 
         if ($quantity !== null && (int) $quantity < 1) {

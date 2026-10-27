@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
-import { Plus, Pencil, Trash2, X, Check } from "lucide-react";
+import { Plus, Pencil, Trash2, X, Check, RefreshCw, Package } from "lucide-react";
 import api from "../../lib/api";
+import MustekImport from "./MustekImport";
+import { brandsForType } from "../../data/laptopBrands";
 import toast from "react-hot-toast";
 import {
   productTypeLabel,
@@ -8,7 +10,20 @@ import {
   merchandiseUsesSizes,
   STORE_DEPARTMENT_SLUGS,
 } from "../../lib/productTypes";
-import { parseColorStock, parseProductOptions } from "../../lib/productOptions";
+import { parseColorStock, parseProductOptions, parseOptionPrices } from "../../lib/productOptions";
+
+const CAPACITY_PRESETS = ["8 GB", "16 GB", "32 GB", "64 GB", "128 GB", "256 GB", "512 GB", "1 TB"];
+
+function capacityRowsToPayload(rows) {
+  const map = {};
+  rows.forEach((r) => {
+    const name = String(r.name || "").trim();
+    if (!name) return;
+    const price = parseFloat(r.price);
+    map[name] = Number.isFinite(price) && price > 0 ? price : null;
+  });
+  return Object.keys(map).length ? JSON.stringify(map) : "";
+}
 
 const emptyForm = {
   name: "",
@@ -17,6 +32,7 @@ const emptyForm = {
   compare_price: "",
   category_id: "",
   subcategory: "",
+  brand: "",
   stock: "0",
   sizes: "",
   colors: "",
@@ -58,10 +74,13 @@ export default function AdminProducts() {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [showModal, setShowModal] = useState(false);
+  const [showMustek, setShowMustek] = useState(false);
+  const [mustekSyncing, setMustekSyncing] = useState(false);
   const [editing, setEditing] = useState(null);
   const ALL_SIZES = ["XS", "S", "M", "L", "XL", "XXL"];
   const [form, setForm] = useState(emptyForm);
   const [colorRows, setColorRows] = useState([{ name: "", stock: "0" }]);
+  const [capacityRows, setCapacityRows] = useState([]);
   const [image, setImage] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -96,6 +115,7 @@ export default function AdminProducts() {
   const isMerchandise = departmentSlug === "merchandise";
   const isAccessories = departmentSlug === "accessories";
   const showSizes = isMerchandise && merchandiseUsesSizes(form.subcategory);
+  const showCapacities = Boolean(departmentSlug) && !isMerchandise;
   const typeOptions = typesForDepartment(departmentSlug);
 
   const fetchData = async () => {
@@ -122,6 +142,24 @@ export default function AdminProducts() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  const handleMustekSync = async () => {
+    setMustekSyncing(true);
+    try {
+      const { data } = await api.post("/mustek/sync", {});
+      const s = data.stats || {};
+      const parts = [`Updated ${s.updated ?? 0} Mustek products`];
+      if (s.specials_started) parts.push(`${s.specials_started} new specials`);
+      if (s.specials_ended) parts.push(`${s.specials_ended} specials ended`);
+      if (s.not_in_feed) parts.push(`${s.not_in_feed} no longer at Mustek (stock set to 0)`);
+      toast.success(parts.join(" · "));
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Mustek sync failed");
+    } finally {
+      setMustekSyncing(false);
+    }
+  };
 
   const saveStock = async (product) => {
     if (product.color_stock) {
@@ -151,6 +189,7 @@ export default function AdminProducts() {
     setEditing(null);
     setForm(emptyForm);
     setColorRows([{ name: "", stock: "0" }]);
+    setCapacityRows([]);
     setImage(null);
     setShowModal(true);
   };
@@ -172,6 +211,11 @@ export default function AdminProducts() {
       }
     }
     setColorRows(rows.length ? rows : [{ name: "", stock: "0" }]);
+    setCapacityRows(
+      String(p.category_slug || "").toLowerCase() === "merchandise"
+        ? []
+        : parseOptionPrices(p.sizes).map((o) => ({ name: o.name, price: o.price != null ? String(o.price) : "" }))
+    );
     setForm({
       name: p.name || "",
       description: p.description || "",
@@ -179,6 +223,7 @@ export default function AdminProducts() {
       compare_price: p.compare_price != null && p.compare_price !== "" ? String(p.compare_price) : "",
       category_id: p.category_id ? String(p.category_id) : "",
       subcategory: p.subcategory || "",
+      brand: p.brand || "",
       stock: String(p.stock ?? 0),
       sizes: p.sizes || "",
       colors: p.colors || "",
@@ -230,7 +275,7 @@ export default function AdminProducts() {
     const payload = {
       ...form,
       subcategory: form.subcategory || "",
-      sizes: showSizes ? form.sizes : "",
+      sizes: showSizes ? form.sizes : showCapacities ? capacityRowsToPayload(capacityRows) : "",
       colors: colorPayload.colors,
       color_stock: colorPayload.color_stock,
       stock: hasColors ? colorPayload.stock : form.stock,
@@ -239,6 +284,7 @@ export default function AdminProducts() {
     const fd = new FormData();
     appendFormData(fd, payload);
     if (!payload.subcategory) fd.append("subcategory", "");
+    if (!payload.sizes) fd.append("sizes", "");
     if (!hasColors) {
       fd.append("colors", "");
       fd.append("color_stock", "");
@@ -289,7 +335,7 @@ export default function AdminProducts() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <h1 className="text-2xl font-black bg-gradient-to-r from-burnt-400 to-primary-400 bg-clip-text text-transparent">
           Products ({products.length})
         </h1>
@@ -297,6 +343,38 @@ export default function AdminProducts() {
           <Plus size={16} /> Add Product
         </button>
       </div>
+
+      <div className="card mb-6 border border-burnt-500/40 bg-burnt-500/10 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="font-semibold">Mustek catalogue</p>
+          <p className="text-sm text-gray-500">
+            Browse Mustek products and pick which ones to add to your store. Syncing updates prices and stock; Mustek
+            price drops of 5% or more become specials automatically.
+          </p>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row shrink-0">
+          <button
+            type="button"
+            onClick={handleMustekSync}
+            disabled={mustekSyncing}
+            className="btn-secondary text-sm inline-flex items-center justify-center gap-2"
+          >
+            <RefreshCw size={16} className={mustekSyncing ? "animate-spin" : ""} />
+            {mustekSyncing ? "Syncing..." : "Sync Mustek prices"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowMustek(true)}
+            className="btn-primary text-sm inline-flex items-center justify-center gap-2"
+          >
+            <Package size={16} /> Browse Mustek products
+          </button>
+        </div>
+      </div>
+
+      {showMustek && (
+        <MustekImport departments={departments} onClose={() => setShowMustek(false)} onImported={fetchData} />
+      )}
 
       <div className="card overflow-x-auto">
         <table className="w-full text-sm">
@@ -331,7 +409,15 @@ export default function AdminProducts() {
                       </div>
                     )}
                   </td>
-                  <td className="py-3 font-medium">{p.name}</td>
+                  <td className="py-3 font-medium">
+                    {p.name}
+                    {p.mustek_sku ? (
+                      <span className="block text-xs font-normal text-sky-500">
+                        Mustek {p.mustek_sku}
+                        {Number(p.mustek_special) === 1 ? " · special" : ""}
+                      </span>
+                    ) : null}
+                  </td>
                   <td className="py-3">{p.category_name || "-"}</td>
                   <td className="py-3">{productTypeLabel(p.subcategory) || "-"}</td>
                   <td className="py-3">R{Number(p.price).toFixed(2)}</td>
@@ -490,6 +576,24 @@ export default function AdminProducts() {
                   </select>
                 </div>
               )}
+              {isElectronics && brandsForType(form.subcategory).length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium mb-1">Brand</label>
+                  <select
+                    value={form.brand}
+                    onChange={(e) => setForm({ ...form, brand: e.target.value })}
+                    className="input-field"
+                  >
+                    <option value="">Detect from product name</option>
+                    {brandsForType(form.subcategory).map(({ name: b }) => (
+                      <option key={b} value={b}>
+                        {b}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">Shoppers filter laptops and tablets by these round brand logos.</p>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium mb-2">
@@ -555,6 +659,79 @@ export default function AdminProducts() {
                       );
                     })}
                   </div>
+                </div>
+              )}
+              {showCapacities && (
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <label className="block text-sm font-medium">Capacity options (e.g. SanDisk 16 GB, 32 GB)</label>
+                    <button
+                      type="button"
+                      className="text-xs text-burnt-500 hover:underline"
+                      onClick={() => setCapacityRows((prev) => [...prev, { name: "", price: "" }])}
+                    >
+                      + Add capacity
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {CAPACITY_PRESETS.map((preset) => {
+                      const added = capacityRows.some((r) => r.name.trim().toLowerCase() === preset.toLowerCase());
+                      return (
+                        <button
+                          key={preset}
+                          type="button"
+                          disabled={added}
+                          onClick={() => setCapacityRows((prev) => [...prev, { name: preset, price: "" }])}
+                          className="px-2.5 py-1 rounded-lg border border-white/15 text-xs font-semibold hover:border-burnt-400/50 disabled:opacity-40"
+                        >
+                          + {preset}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {capacityRows.length > 0 && (
+                    <div className="space-y-2">
+                      {capacityRows.map((row, idx) => (
+                        <div key={idx} className="flex gap-2 items-center">
+                          <input
+                            placeholder="Capacity (e.g. 64 GB)"
+                            value={row.name}
+                            onChange={(e) => {
+                              const next = [...capacityRows];
+                              next[idx] = { ...next[idx], name: e.target.value };
+                              setCapacityRows(next);
+                            }}
+                            className="input-field flex-1"
+                          />
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            placeholder={form.price ? `R${form.price}` : "Price"}
+                            value={row.price}
+                            onChange={(e) => {
+                              const next = [...capacityRows];
+                              next[idx] = { ...next[idx], price: e.target.value };
+                              setCapacityRows(next);
+                            }}
+                            className="input-field w-28"
+                            title="Price for this capacity (blank = base price)"
+                          />
+                          <button
+                            type="button"
+                            className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg"
+                            onClick={() => setCapacityRows((prev) => prev.filter((_, i) => i !== idx))}
+                            title="Remove capacity"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-xs text-gray-500 mt-1">
+                    Shoppers must pick a capacity. Set a price per capacity, or leave it blank to use the main price. Leave empty if the product has no capacity options.
+                  </p>
                 </div>
               )}
               <div>

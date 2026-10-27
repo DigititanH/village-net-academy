@@ -4,6 +4,23 @@ import axios from "axios";
 const apiOrigin = String(import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 export const API_BASE = apiOrigin ? `${apiOrigin}/api` : "/api";
 
+/** Resolve uploaded/API media paths for img src (keeps public frontend assets as-is). */
+export function mediaUrl(path) {
+  if (!path) return "";
+  if (/^https?:\/\//i.test(path) || path.startsWith("data:")) return path;
+  if (path.startsWith("/uploads/") && apiOrigin) return `${apiOrigin}${path}`;
+  return path;
+}
+
+/** Product image src; use thumb=true on shop grids so Mustek proxy stays light. */
+export function productImageUrl(path, { thumb = false } = {}) {
+  const src = mediaUrl(path);
+  if (!src || !thumb) return src;
+  if (!src.includes("/api/mustek/image")) return src;
+  if (/([?&])size=/.test(src)) return src;
+  return `${src}${src.includes("?") ? "&" : "?"}size=thumb`;
+}
+
 const api = axios.create({
   baseURL: API_BASE,
 });

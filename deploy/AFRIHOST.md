@@ -133,6 +133,17 @@ In PayFast merchant settings, notify/return URLs must match `.env` and be public
 
 Never use `localhost` on live.
 
+### Scheduled Mustek sync (prices, stock and specials)
+
+1. In `backend-php/.env`, set `MUSTEK_CUSTOMER_TOKEN` and a long random `MUSTEK_CRON_KEY`.
+2. In cPanel → **Cron Jobs**, add (e.g. every 2 hours):
+
+   ```bash
+   curl -s "https://www.villagenetacad.co.za/api/cron/mustek-sync?key=YOUR_MUSTEK_CRON_KEY" > /dev/null
+   ```
+
+3. Mustek price drops of 5% or more (`MUSTEK_SPECIAL_MIN_DROP`) become specials (old price shown crossed out) and admins get a summary email. When Mustek's price recovers, the special ends.
+
 ---
 
 ## 11. Go-live checklist

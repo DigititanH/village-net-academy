@@ -234,9 +234,9 @@ class AuthController
             }
         }
 
-        // Mobile app: skip email-link gate and issue JWT (SMTP often unset on shared host).
-        // Website register still requires confirmation link.
-        if ($isMobile && $userRole !== 'reseller') {
+        // Mobile app: skip email-link gate for customers only and issue JWT.
+        // Centres (academy) and resellers must confirm email via the link.
+        if ($isMobile && $userRole === 'customer') {
             try {
                 Database::queryRun(
                     'UPDATE registrations SET is_verified = 1, verification_token = NULL, verification_token_expires = NULL WHERE id = ?',
@@ -266,7 +266,7 @@ class AuthController
                     'name' => $name,
                     'email' => strtolower(trim((string) $email)),
                     'role' => $userRole,
-                    'academy_name' => $userRole === 'academy' ? $academyName : null,
+                    'academy_name' => null,
                     'is_approved' => $approvalStatus,
                     'is_verified' => true,
                 ],
@@ -274,10 +274,19 @@ class AuthController
         }
 
         if ($verificationToken) {
-            $emailSent = self::sendVerificationEmail($email, $name, $verificationToken, $isMobile);
+            $emailSent = self::sendVerificationEmail(
+                $email,
+                $name,
+                $verificationToken,
+                $isMobile,
+                $userRole,
+                $userRole === 'academy' ? $academyName : null
+            );
 
             $message = $emailSent
-                ? 'Account created. Please check your email and click the confirmation link before signing in.'
+                ? ($userRole === 'academy'
+                    ? 'Centre account created. Check your email for a welcome message and click the confirmation link before signing in.'
+                    : 'Account created. Please check your email and click the confirmation link before signing in.')
                 : 'Account created, but the confirmation email could not be sent. You can request another link from the confirmation page. Also ask the admin to set SMTP_PASS in backend-php/.env.';
 
             Response::json([
@@ -449,7 +458,7 @@ class AuthController
         $user = null;
         try {
             $user = Database::queryGet(
-                'SELECT r.id, r.name, r.role, r.is_approved, r.created_at, r.verification_token_expires, l.email
+                'SELECT r.id, r.name, r.role, r.academy_name, r.is_approved, r.created_at, r.verification_token_expires, l.email
                  FROM registrations r
                  INNER JOIN logins l ON l.registration_id = r.id
                  WHERE r.verification_token = ?',
@@ -463,6 +472,9 @@ class AuthController
                  WHERE r.verification_token = ?',
                 [$token]
             );
+            if ($user) {
+                $user['academy_name'] = null;
+            }
         }
         if (!$user) {
             Response::error('Invalid or expired verification link. You can request a new confirmation email.', 400);
@@ -502,11 +514,15 @@ class AuthController
             (string) $user['email'],
             (string) $user['name'],
             $forMobile,
-            $awaitingApproval
+            $awaitingApproval,
+            (string) ($user['role'] ?? ''),
+            (string) ($user['academy_name'] ?? '')
         );
 
         $message = 'Email verified successfully';
-        if ($forMobile) {
+        if (($user['role'] ?? '') === 'academy') {
+            $message = 'Email verified. Welcome to Village NetAcad — you can now sign in to your centre dashboard.';
+        } elseif ($forMobile) {
             $message = $awaitingApproval
                 ? 'Email verified. Your reseller account still needs Digititan / Ops approval — we will email you when you can sign in.'
                 : 'Email verified successfully. Open the Village NetAcad app and sign in.';
@@ -537,7 +553,9 @@ class AuthController
                 (int) $user['id'],
                 $email,
                 (string) $user['name'],
-                self::isMobileRequest($body)
+                self::isMobileRequest($body),
+                (string) ($user['role'] ?? ''),
+                (string) ($user['academy_name'] ?? '')
             );
             if (!$emailSent) {
                 error_log('[resendVerification] mail failed: ' . (Mailer::$lastError ?? 'unknown'));
@@ -555,7 +573,9 @@ class AuthController
         int $userId,
         string $email,
         string $name,
-        bool $forMobile = false
+        bool $forMobile = false,
+        string $role = '',
+        ?string $academyName = null
     ): bool {
         if ($userId < 1 || $email === '') {
             return false;
@@ -573,7 +593,7 @@ class AuthController
                 [$token, $userId]
             );
         }
-        return self::sendVerificationEmail($email, $name, $token, $forMobile);
+        return self::sendVerificationEmail($email, $name, $token, $forMobile, $role, $academyName);
     }
 
     private static function isMobileRequest(?array $body = null): bool
@@ -588,44 +608,89 @@ class AuthController
         string $email,
         string $name,
         string $verificationToken,
-        bool $forMobile = false
+        bool $forMobile = false,
+        string $role = '',
+        ?string $academyName = null
     ): bool {
         $base = rtrim((string) Client::getClientUrl(), '/');
+        $isCentre = $role === 'academy';
+        $centreLabel = trim((string) $academyName);
+
         if ($forMobile) {
-            // Lightweight page in public/ — tells user to return to the app (no website login CTA).
             $verifyUrl = $base . '/app-verify-email.html?token=' . urlencode($verificationToken);
-            $subject = 'Confirm your email — Village NetAcad app';
-            $html = '<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#111;line-height:1.5">'
-                . '<h2 style="color:#16a34a;margin-bottom:8px">Confirm your email for the app</h2>'
-                . '<p>Hi ' . htmlspecialchars($name) . ',</p>'
-                . '<p>Thanks for signing up in the <strong>Village NetAcad mobile app</strong>. '
-                . 'Tap the button below to confirm this email address.</p>'
-                . '<p style="margin:28px 0">'
-                . '<a href="' . htmlspecialchars($verifyUrl) . '" style="background:#16a34a;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold">'
-                . 'Confirm my email</a></p>'
-                . '<p style="font-size:14px;color:#333"><strong>Then open the Village NetAcad app</strong> on your phone and sign in with this email.</p>'
-                . '<p style="font-size:14px;color:#333">This link works for 24 hours. If it expires, use <em>Resend confirmation email</em> on the app sign-in screen.</p>'
-                . '<p style="font-size:13px;color:#555">If the button does not work, copy and paste this link into your browser:<br>'
-                . htmlspecialchars($verifyUrl) . '</p>'
-                . '<p style="margin-top:24px"><strong>The Village NetAcad Team</strong></p>'
-                . '<p style="font-size:13px;color:#555">If you did not create this account, you can ignore this email.</p>'
-                . '</div>';
+            if ($isCentre) {
+                $subject = 'Welcome — confirm your Village NetAcad centre email';
+                $html = '<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#111;line-height:1.5">'
+                    . '<h2 style="color:#16a34a;margin-bottom:8px">Welcome, centre partner</h2>'
+                    . '<p>Hi ' . htmlspecialchars($name) . ',</p>'
+                    . '<p>Welcome to the <strong>Village NetAcad</strong> programme'
+                    . ($centreLabel !== '' ? ' for <strong>' . htmlspecialchars($centreLabel) . '</strong>' : '')
+                    . '. We are glad to have your centre with us.</p>'
+                    . '<p>Please confirm this email address to activate your centre account:</p>'
+                    . '<p style="margin:28px 0">'
+                    . '<a href="' . htmlspecialchars($verifyUrl) . '" style="background:#16a34a;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold">'
+                    . 'Confirm my email</a></p>'
+                    . '<p style="font-size:14px;color:#333">After confirming, open the <strong>Village NetAcad</strong> app and sign in to access your centre dashboard.</p>'
+                    . '<p style="font-size:14px;color:#333">This link works for 24 hours. If it expires, use <em>Resend confirmation email</em> on the sign-in screen.</p>'
+                    . '<p style="font-size:13px;color:#555">If the button does not work, copy and paste this link into your browser:<br>'
+                    . htmlspecialchars($verifyUrl) . '</p>'
+                    . '<p style="margin-top:24px"><strong>The Village NetAcad Team</strong></p>'
+                    . '</div>';
+            } else {
+                $subject = 'Confirm your email — Village NetAcad app';
+                $html = '<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#111;line-height:1.5">'
+                    . '<h2 style="color:#16a34a;margin-bottom:8px">Confirm your email for the app</h2>'
+                    . '<p>Hi ' . htmlspecialchars($name) . ',</p>'
+                    . '<p>Thanks for signing up in the <strong>Village NetAcad mobile app</strong>. '
+                    . 'Tap the button below to confirm this email address.</p>'
+                    . '<p style="margin:28px 0">'
+                    . '<a href="' . htmlspecialchars($verifyUrl) . '" style="background:#16a34a;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold">'
+                    . 'Confirm my email</a></p>'
+                    . '<p style="font-size:14px;color:#333"><strong>Then open the Village NetAcad app</strong> on your phone and sign in with this email.</p>'
+                    . '<p style="font-size:14px;color:#333">This link works for 24 hours. If it expires, use <em>Resend confirmation email</em> on the app sign-in screen.</p>'
+                    . '<p style="font-size:13px;color:#555">If the button does not work, copy and paste this link into your browser:<br>'
+                    . htmlspecialchars($verifyUrl) . '</p>'
+                    . '<p style="margin-top:24px"><strong>The Village NetAcad Team</strong></p>'
+                    . '<p style="font-size:13px;color:#555">If you did not create this account, you can ignore this email.</p>'
+                    . '</div>';
+            }
         } else {
             $verifyUrl = $base . '/verify-email?token=' . urlencode($verificationToken);
-            $subject = 'Confirm your email — Village NetAcad';
-            $html = '<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#111;line-height:1.5">'
-                . '<h2 style="color:#16a34a;margin-bottom:8px">Confirm your email address</h2>'
-                . '<p>Hi ' . htmlspecialchars($name) . ',</p>'
-                . '<p>Thank you for registering with <strong>Village NetAcad</strong>. Please confirm your email address to activate your account.</p>'
-                . '<p style="margin:28px 0">'
-                . '<a href="' . htmlspecialchars($verifyUrl) . '" style="background:#16a34a;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold">'
-                . 'Confirm my email</a></p>'
-                . '<p style="font-size:14px;color:#333"><strong>This confirmation link is available for 24 hours.</strong> If it expires, you can request another link from the website.</p>'
-                . '<p style="font-size:13px;color:#555">If the button does not work, copy and paste this link into your browser:<br>'
-                . htmlspecialchars($verifyUrl) . '</p>'
-                . '<p style="margin-top:24px"><strong>The Village NetAcad Team</strong></p>'
-                . '<p style="font-size:13px;color:#555">If you did not create this account, you can ignore this email.</p>'
-                . '</div>';
+            if ($isCentre) {
+                $subject = 'Welcome — confirm your Village NetAcad centre email';
+                $html = '<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#111;line-height:1.5">'
+                    . '<h2 style="color:#16a34a;margin-bottom:8px">Welcome to Village NetAcad</h2>'
+                    . '<p>Hi ' . htmlspecialchars($name) . ',</p>'
+                    . '<p>Thank you for registering your centre'
+                    . ($centreLabel !== '' ? ', <strong>' . htmlspecialchars($centreLabel) . '</strong>,' : '')
+                    . ' with the <strong>Village NetAcad</strong> programme. We are excited to partner with you.</p>'
+                    . '<p>Please confirm your email address to activate your centre account and unlock your dashboard:</p>'
+                    . '<p style="margin:28px 0">'
+                    . '<a href="' . htmlspecialchars($verifyUrl) . '" style="background:#16a34a;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold">'
+                    . 'Confirm my email</a></p>'
+                    . '<p style="font-size:14px;color:#333">After you confirm, you will receive a short welcome email and can sign in to view linked reseller sales and centre activity.</p>'
+                    . '<p style="font-size:14px;color:#333"><strong>This confirmation link is available for 24 hours.</strong> If it expires, request another link from the website.</p>'
+                    . '<p style="font-size:13px;color:#555">If the button does not work, copy and paste this link into your browser:<br>'
+                    . htmlspecialchars($verifyUrl) . '</p>'
+                    . '<p style="margin-top:24px"><strong>The Village NetAcad Team</strong></p>'
+                    . '<p style="font-size:13px;color:#555">If you did not create this account, you can ignore this email.</p>'
+                    . '</div>';
+            } else {
+                $subject = 'Confirm your email — Village NetAcad';
+                $html = '<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#111;line-height:1.5">'
+                    . '<h2 style="color:#16a34a;margin-bottom:8px">Confirm your email address</h2>'
+                    . '<p>Hi ' . htmlspecialchars($name) . ',</p>'
+                    . '<p>Thank you for registering with <strong>Village NetAcad</strong>. Please confirm your email address to activate your account.</p>'
+                    . '<p style="margin:28px 0">'
+                    . '<a href="' . htmlspecialchars($verifyUrl) . '" style="background:#16a34a;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold">'
+                    . 'Confirm my email</a></p>'
+                    . '<p style="font-size:14px;color:#333"><strong>This confirmation link is available for 24 hours.</strong> If it expires, you can request another link from the website.</p>'
+                    . '<p style="font-size:13px;color:#555">If the button does not work, copy and paste this link into your browser:<br>'
+                    . htmlspecialchars($verifyUrl) . '</p>'
+                    . '<p style="margin-top:24px"><strong>The Village NetAcad Team</strong></p>'
+                    . '<p style="font-size:13px;color:#555">If you did not create this account, you can ignore this email.</p>'
+                    . '</div>';
+            }
         }
 
         try {
@@ -685,9 +750,32 @@ class AuthController
         string $email,
         string $name,
         bool $forMobile = false,
-        bool $awaitingResellerApproval = false
+        bool $awaitingResellerApproval = false,
+        string $role = '',
+        string $academyName = ''
     ): void {
-        if ($forMobile) {
+        $isCentre = $role === 'academy';
+        $centreLabel = trim($academyName);
+        $base = rtrim((string) Client::getClientUrl(), '/');
+
+        if ($isCentre) {
+            $dashUrl = $base . '/academy/dashboard';
+            $loginUrl = $base . '/login';
+            $html = '<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#111;line-height:1.5">'
+                . '<h2 style="color:#16a34a;margin-bottom:8px">Welcome to the Village NetAcad programme</h2>'
+                . '<p>Hi ' . htmlspecialchars($name) . ',</p>'
+                . '<p>Your email is confirmed'
+                . ($centreLabel !== '' ? ' for <strong>' . htmlspecialchars($centreLabel) . '</strong>' : '')
+                . '. Welcome aboard as a Village NetAcad <strong>centre</strong>.</p>'
+                . '<p>You can now sign in to your centre dashboard to follow linked reseller activity and your centre share of sales.</p>'
+                . '<p style="margin:28px 0">'
+                . '<a href="' . htmlspecialchars($forMobile ? $loginUrl : $dashUrl) . '" style="background:#16a34a;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold">'
+                . ($forMobile ? 'Sign in to Village NetAcad' : 'Open centre dashboard') . '</a></p>'
+                . '<p>We look forward to growing networking education with your community.</p>'
+                . '<p style="margin-top:24px"><strong>The Village NetAcad Team</strong></p>'
+                . '</div>';
+            $subject = 'Welcome to Village NetAcad — your centre is ready';
+        } elseif ($forMobile) {
             if ($awaitingResellerApproval) {
                 $html = '<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#111;line-height:1.5">'
                     . '<h2 style="color:#16a34a;margin-bottom:8px">You\'re confirmed — wait for approval</h2>'
@@ -715,7 +803,7 @@ class AuthController
                 $subject = 'Email confirmed — open the Village NetAcad app';
             }
         } else {
-            $loginUrl = rtrim((string) Client::getClientUrl(), '/') . '/login';
+            $loginUrl = $base . '/login';
             $html = '<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#111;line-height:1.5">'
                 . '<h2 style="color:#16a34a;margin-bottom:8px">Welcome to the Village NetAcad program!</h2>'
                 . '<p>Hi ' . htmlspecialchars($name) . ',</p>'

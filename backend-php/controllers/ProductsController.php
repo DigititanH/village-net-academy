@@ -28,7 +28,7 @@ class ProductsController
     }
 
     /** @return list<string> */
-    private static function storeDepartments(): array
+    public static function storeDepartments(): array
     {
         return ['merchandise', 'electronics', 'accessories'];
     }
@@ -51,7 +51,7 @@ class ProductsController
         return ['bags', 'usb', 'headphones', 'powerbank', 'cameras'];
     }
 
-    private static function normalizeSubcategory(mixed $value, ?string $categorySlug = null): ?string
+    public static function normalizeSubcategory(mixed $value, ?string $categorySlug = null): ?string
     {
         $raw = strtolower(trim((string) ($value ?? '')));
         if ($raw === '') {
@@ -125,7 +125,7 @@ class ProductsController
         return null;
     }
 
-    private static function categorySlugById(?int $categoryId): ?string
+    public static function categorySlugById(?int $categoryId): ?string
     {
         if (!$categoryId) {
             return null;
@@ -136,53 +136,74 @@ class ProductsController
 
     public static function index(): void
     {
-        $category = Request::query('category');
-        $subcategory = self::normalizeSubcategory(Request::query('subcategory'), $category ?: null);
-        $search = Request::query('search');
+        SchemaEnsure::products();
+        $category = trim((string) (Request::query('category') ?? ''));
+        $brand = Brands::normalize(Request::query('brand'));
+        $subcategory = self::normalizeSubcategory(Request::query('subcategory'), $category !== '' ? $category : null);
+        $search = trim((string) (Request::query('search') ?? ''));
         $sort = Request::query('sort');
         $page = max(1, (int) Request::query('page', 1));
         $limit = max(1, min(200, (int) Request::query('limit', 100)));
+        $minPrice = self::nullableDecimal(Request::query('min_price'));
+        $maxPrice = self::nullableDecimal(Request::query('max_price'));
 
-        $sql = "SELECT p.*, c.name as category_name, c.slug as category_slug,
-            (SELECT ROUND(AVG(rating),1) FROM reviews WHERE product_id = p.id) as avg_rating,
-            (SELECT COUNT(*) FROM reviews WHERE product_id = p.id) as review_count
-            FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.is_active = 1";
+        $where = ' WHERE p.is_active = 1';
         $params = [];
 
-        if ($category) {
-            $sql .= ' AND c.slug = ?';
+        if ($category !== '') {
+            $where .= ' AND c.slug = ?';
             $params[] = $category;
         }
         if ($subcategory) {
-            $sql .= ' AND p.subcategory = ?';
+            $where .= ' AND p.subcategory = ?';
             $params[] = $subcategory;
         }
-        if ($search) {
-            $sql .= ' AND (p.name LIKE ? OR p.description LIKE ?)';
+        if ($brand) {
+            $where .= " AND (p.brand = ? OR ((p.brand IS NULL OR p.brand = '') AND (LOWER(p.name) LIKE ? OR LOWER(p.name) LIKE ?)))";
+            $params[] = $brand;
+            $params[] = strtolower($brand) . ' %';
+            $params[] = '% ' . strtolower($brand) . ' %';
+        }
+        if ($search !== '') {
+            $where .= ' AND (p.name LIKE ? OR p.description LIKE ?)';
             $term = '%' . $search . '%';
             $params[] = $term;
             $params[] = $term;
         }
+        if ($minPrice !== null && is_numeric($minPrice) && (float) $minPrice >= 0) {
+            $where .= ' AND p.price >= ?';
+            $params[] = (float) $minPrice;
+        }
+        if ($maxPrice !== null && is_numeric($maxPrice) && (float) $maxPrice >= 0) {
+            $where .= ' AND p.price <= ?';
+            $params[] = (float) $maxPrice;
+        }
 
+        $from = ' FROM products p LEFT JOIN categories c ON p.category_id = c.id';
+
+        $countResult = Database::queryGet('SELECT COUNT(*) as total' . $from . $where, $params);
+        $total = (int) ($countResult['total'] ?? 0);
+
+        $order = ' ORDER BY p.created_at DESC';
         if ($sort === 'price_asc') {
-            $sql .= ' ORDER BY p.price ASC';
+            $order = ' ORDER BY p.price ASC';
         } elseif ($sort === 'price_desc') {
-            $sql .= ' ORDER BY p.price DESC';
-        } else {
-            $sql .= ' ORDER BY p.created_at DESC';
+            $order = ' ORDER BY p.price DESC';
         }
 
         $offset = ($page - 1) * $limit;
-        $sql .= ' LIMIT ? OFFSET ?';
-        $params[] = $limit;
-        $params[] = $offset;
+        // Integers inlined — native prepared statements reject bound LIMIT/OFFSET on some MySQL setups.
+        $sql = "SELECT p.*, c.name as category_name, c.slug as category_slug,
+            (SELECT ROUND(AVG(rating),1) FROM reviews WHERE product_id = p.id) as avg_rating,
+            (SELECT COUNT(*) FROM reviews WHERE product_id = p.id) as review_count"
+            . $from . $where . $order
+            . ' LIMIT ' . $limit . ' OFFSET ' . $offset;
 
         $products = Database::queryAll($sql, $params);
-        $countResult = Database::queryGet('SELECT COUNT(*) as total FROM products WHERE is_active = 1');
 
         Response::json([
             'products' => $products,
-            'total' => (int) ($countResult['total'] ?? 0),
+            'total' => $total,
             'page' => $page,
             'limit' => $limit,
         ]);
@@ -259,10 +280,12 @@ class ProductsController
             : (isset($body['stock']) && $body['stock'] !== '' ? max(0, (int) $body['stock']) : 0);
         $colorsValue = $colorInfo['colorsJson'] ?? self::nullableString($body['colors'] ?? null);
 
+        $brand = Brands::normalize($body['brand'] ?? null) ?? Brands::fromName($name);
+
         try {
             $result = Database::queryRun(
-                'INSERT INTO products (name, slug, description, price, compare_price, category_id, subcategory, image, stock, sizes, colors, color_stock)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                'INSERT INTO products (name, slug, description, price, compare_price, category_id, subcategory, image, stock, sizes, colors, color_stock, brand)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 [
                     $name,
                     $slug,
@@ -273,9 +296,10 @@ class ProductsController
                     $subcategory,
                     $imageUrl,
                     $stockTotal,
-                    $categorySlug === 'merchandise' ? self::nullableString($body['sizes'] ?? null) : null,
+                    ProductOptions::encode($body['sizes'] ?? null),
                     $colorsValue,
                     $colorInfo['colorStockJson'],
+                    $brand,
                 ]
             );
         } catch (Throwable $e) {
@@ -296,7 +320,7 @@ class ProductsController
                             $subcategory,
                             $imageUrl,
                             $stockTotal,
-                            $categorySlug === 'merchandise' ? self::nullableString($body['sizes'] ?? null) : null,
+                            ProductOptions::encode($body['sizes'] ?? null),
                             $colorsValue,
                         ]
                     );
@@ -413,13 +437,13 @@ class ProductsController
             $fields[] = 'stock = ?';
             $sqlParams[] = max(0, (int) $body['stock']);
         }
+        if (array_key_exists('brand', $body)) {
+            $fields[] = 'brand = ?';
+            $sqlParams[] = Brands::normalize($body['brand']);
+        }
         if (array_key_exists('sizes', $body)) {
-            $sizesValue = ($body['sizes'] === '' || $body['sizes'] === null) ? null : $body['sizes'];
-            if (($categorySlug ?? null) !== 'merchandise') {
-                $sizesValue = null;
-            }
             $fields[] = 'sizes = ?';
-            $sqlParams[] = $sizesValue;
+            $sqlParams[] = ProductOptions::encode($body['sizes']);
         }
         if (array_key_exists('is_active', $body)) {
             $fields[] = 'is_active = ?';

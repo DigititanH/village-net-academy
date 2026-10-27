@@ -67,6 +67,44 @@ class AdminNotify
         }
     }
 
+    /**
+     * @param list<array<string, mixed>> $started
+     * @param list<array<string, mixed>> $ended
+     */
+    public static function mustekSpecials(array $started, array $ended): void
+    {
+        if ($started === [] && $ended === []) {
+            return;
+        }
+        $rows = static function (array $list): string {
+            $html = '<ul>';
+            foreach ($list as $r) {
+                $html .= '<li>' . htmlspecialchars((string) $r['name']) . ' (' . htmlspecialchars((string) $r['sku']) . '): R'
+                    . number_format((float) $r['was'], 2) . ' &rarr; R' . number_format((float) $r['now'], 2) . '</li>';
+            }
+            return $html . '</ul>';
+        };
+        $html = '<p>The Mustek sync changed specials in the Village NetAcad shop.</p>';
+        if ($started) {
+            $html .= '<p><strong>New / deeper specials (' . count($started) . ')</strong></p>' . $rows($started);
+        }
+        if ($ended) {
+            $html .= '<p><strong>Specials ended (' . count($ended) . ')</strong></p>' . $rows($ended);
+        }
+
+        foreach (self::emails() as $to) {
+            try {
+                Mailer::send([
+                    'to' => $to,
+                    'subject' => 'Mustek specials update: ' . count($started) . ' started, ' . count($ended) . ' ended',
+                    'html' => $html,
+                ]);
+            } catch (Throwable $e) {
+                error_log('[AdminNotify] skip ' . $to . ': ' . $e->getMessage());
+            }
+        }
+    }
+
     public static function returnRequested(
         int $orderId,
         string $customerName,

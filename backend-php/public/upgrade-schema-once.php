@@ -82,8 +82,18 @@ $patches = [
     ['hero_slides', 'title_highlight_color', "VARCHAR(20) NOT NULL DEFAULT ''"],
     ['hero_slides', 'subtitle_color', "VARCHAR(20) NOT NULL DEFAULT '#F5F5F5'"],
     ['hero_slides', 'body_color', "VARCHAR(20) NOT NULL DEFAULT '#E5E5E5'"],
+    ['hero_slides', 'title_font', "VARCHAR(20) NOT NULL DEFAULT 'display'"],
+    ['hero_slides', 'title_style', "VARCHAR(20) NOT NULL DEFAULT 'bold'"],
+    ['hero_slides', 'text_font', "VARCHAR(20) NOT NULL DEFAULT 'sans'"],
+    ['hero_slides', 'text_style', "VARCHAR(20) NOT NULL DEFAULT 'normal'"],
     ['hero_buttons', 'slide_id', 'INT NULL'],
     ['products', 'subcategory', 'VARCHAR(80) DEFAULT NULL'],
+    ['products', 'color_stock', 'TEXT DEFAULT NULL'],
+    ['products', 'mustek_sku', 'VARCHAR(64) DEFAULT NULL'],
+    ['products', 'mustek_cost', 'DECIMAL(10,2) DEFAULT NULL'],
+    ['products', 'mustek_special', 'TINYINT(1) NOT NULL DEFAULT 0'],
+    ['products', 'mustek_synced_at', 'DATETIME DEFAULT NULL'],
+    ['products', 'brand', 'VARCHAR(80) DEFAULT NULL'],
 ];
 
 foreach ($patches as [$table, $column, $def]) {

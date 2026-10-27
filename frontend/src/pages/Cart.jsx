@@ -4,13 +4,15 @@ import { ShoppingCart, Trash2, Plus, Minus } from "lucide-react";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import { getReferralCode, setReferralCode } from "../lib/referral";
-import { parseProductOptions, colorSwatchHex } from "../lib/productOptions";
+import { productOptionNames, optionLabel, colorSwatchHex } from "../lib/productOptions";
+import { formatRand, vatFromInclusive, vatPercentLabel } from "../lib/vat";
 import toast from "react-hot-toast";
 
 export default function Cart() {
   const { items, updateSize, updateQuantity, removeItem, total, loading } = useCart();
   const { user } = useAuth();
   const [referral, setReferral] = useState(() => getReferralCode());
+  const vat = vatFromInclusive(total);
 
   if (!user) return (
     <div className="min-h-[60vh] flex items-center justify-center">
@@ -48,17 +50,17 @@ export default function Cart() {
                 <div className="flex-1 min-w-0">
                   <h3 className="font-bold truncate">{item.name}</h3>
                   <div className="flex flex-col gap-2 mt-1">
-                    {parseProductOptions(item.available_sizes).length > 0 ? (
+                    {productOptionNames(item).length > 0 ? (
                       <select
                         value={item.size || ""}
                         onChange={(e) => updateSize(item.id, e.target.value)}
                         className="select-field-sm max-w-full"
                       >
-                        <option value="">Select Size</option>
-                        {parseProductOptions(item.available_sizes).map((s) => <option key={s} value={s}>{s}</option>)}
+                        <option value="">Select {optionLabel(item)}</option>
+                        {productOptionNames(item).map((s) => <option key={s} value={s}>{s}</option>)}
                       </select>
                     ) : item.size ? (
-                      <span className="text-sm text-gray-400">Size: {item.size}</span>
+                      <span className="text-sm text-gray-400">{optionLabel(item)}: {item.size}</span>
                     ) : null}
                     {item.color && (
                       <span className="text-sm text-gray-400 inline-flex items-center gap-2">
@@ -109,9 +111,19 @@ export default function Cart() {
               className="input-field"
             />
           </div>
-          <div className="flex items-center justify-between">
-            <span className="text-lg font-bold">Total</span>
-            <span className="text-2xl font-black text-burnt-600">R{total.toFixed(2)}</span>
+          <div className="space-y-2 border-t border-white/10 pt-4">
+            <div className="flex items-center justify-between gap-3 text-sm">
+              <span className="text-gray-400">Price excl. VAT</span>
+              <span className="shrink-0">{formatRand(vat.excl)}</span>
+            </div>
+            <div className="flex items-center justify-between gap-3 text-sm">
+              <span className="text-gray-400">VAT ({vatPercentLabel()})</span>
+              <span className="shrink-0">{formatRand(vat.vat)}</span>
+            </div>
+            <div className="flex items-center justify-between gap-3 pt-2">
+              <span className="text-lg font-bold">Total incl. VAT</span>
+              <span className="text-2xl font-black text-burnt-600 shrink-0">{formatRand(vat.total)}</span>
+            </div>
           </div>
           <Link to="/checkout" className="btn-primary w-full text-center block">Proceed to Checkout</Link>
         </div>

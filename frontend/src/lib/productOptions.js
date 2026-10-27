@@ -37,6 +37,64 @@ export function parseProductOptions(value) {
 }
 
 /**
+ * Size/capacity options with optional per-option price.
+ * Stored in products.sizes as ["S","M"] (no prices) or {"16 GB": 129.99, "32 GB": null}.
+ * Returns [{ name, price }] where price is a number or null (= base price).
+ */
+export function parseOptionPrices(value) {
+  if (value == null || value === "") return [];
+  let parsed = value;
+  if (typeof value === "string") {
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      return parseProductOptions(value).map((name) => ({ name, price: null }));
+    }
+  }
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    return Object.entries(parsed)
+      .map(([name, price]) => {
+        const n = Number(price);
+        return { name: String(name).trim(), price: price === null || price === "" || !Number.isFinite(n) || n <= 0 ? null : n };
+      })
+      .filter((o) => o.name);
+  }
+  return parseProductOptions(parsed).map((name) => ({ name, price: null }));
+}
+
+/** Option names shown to shoppers (sizes for apparel, capacities for devices). */
+export function productOptionNames(product) {
+  return parseOptionPrices(product?.sizes ?? product?.available_sizes).map((o) => o.name);
+}
+
+/** Price for the chosen size/capacity, falling back to the product's base price. */
+export function priceForOption(product, option) {
+  const base = Number(product?.price) || 0;
+  if (!option) return base;
+  const match = parseOptionPrices(product?.sizes ?? product?.available_sizes).find(
+    (o) => o.name.toLowerCase() === String(option).trim().toLowerCase()
+  );
+  return match && match.price != null ? match.price : base;
+}
+
+/** Lowest option price, for "from R…" labels when options are priced differently. */
+export function lowestOptionPrice(product) {
+  const base = Number(product?.price) || 0;
+  const prices = parseOptionPrices(product?.sizes).map((o) => (o.price != null ? o.price : base));
+  return prices.length ? Math.min(...prices) : base;
+}
+
+export function hasVariablePricing(product) {
+  return parseOptionPrices(product?.sizes).some((o) => o.price != null && o.price !== Number(product?.price));
+}
+
+/** "Size" for apparel, "Capacity" for devices and accessories. */
+export function optionLabel(product) {
+  const slug = String(product?.category_slug || "").toLowerCase();
+  return slug === "merchandise" || slug === "" ? "Size" : "Capacity";
+}
+
+/**
  * Parse per-colour stock map from products.color_stock JSON.
  * Returns [{ name, stock }]
  */

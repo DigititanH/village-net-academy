@@ -87,7 +87,9 @@ export default function Register() {
             Create Account
           </h1>
           <p className="text-sm text-gray-400 mt-1">
-            Register to access courses. We will email you a confirmation link.
+            {role === "academy"
+              ? "Register your centre. We will email a welcome message and a confirmation link."
+              : "Register to access courses. We will email you a confirmation link."}
           </p>
         </div>
 

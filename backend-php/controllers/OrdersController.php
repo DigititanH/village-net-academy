@@ -73,12 +73,21 @@ class OrdersController
 
         foreach ($items as $item) {
             $product = Database::queryGet(
-                'SELECT id, price, stock, name, color_stock FROM products WHERE id = ? AND is_active = 1',
+                'SELECT id, price, stock, name, sizes, color_stock FROM products WHERE id = ? AND is_active = 1',
                 [$item['product_id']]
             );
             if (!$product) {
                 Response::error('Product ' . ($item['product_id'] ?? '') . ' not found', 400);
             }
+            $optionMap = ProductOptions::decode($product['sizes'] ?? null);
+            if ($optionMap) {
+                $option = ProductOptions::match($optionMap, $item['size'] ?? null);
+                if ($option === null) {
+                    Response::error('Please choose an option for ' . $product['name'], 400);
+                }
+                $item['size'] = $option;
+            }
+            $product['price'] = ProductOptions::priceFor($product['sizes'] ?? null, $item['size'] ?? null, (float) $product['price']);
             $colorMap = ColorStock::decode($product['color_stock'] ?? null);
             $available = ColorStock::available($colorMap, $item['color'] ?? null, (int) $product['stock']);
             if ($available < (int) $item['quantity']) {

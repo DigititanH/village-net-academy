@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Mail, Phone, MapPin, Send, CheckCircle, Facebook, Instagram, Linkedin } from "lucide-react";
+import { Mail, Phone, MapPin, Send, CheckCircle } from "lucide-react";
 import api from "../lib/api";
 import { SITE_EMAIL } from "../lib/site";
 import { digititanContact, digititanLinks } from "../data/digititanAbout";
@@ -15,19 +15,11 @@ function WhatsAppIcon({ size = 20 }) {
   );
 }
 
-function TikTokIcon({ size = 20 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1v-3.52a6.37 6.37 0 0 0-.79-.05A6.34 6.34 0 0 0 3.15 15.3a6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.34-6.34V8.73a8.19 8.19 0 0 0 4.76 1.52V6.84a4.84 4.84 0 0 1-1-.15z" />
-    </svg>
-  );
-}
-
 const socials = [
-  { name: "Facebook", href: digititanLinks.facebook, Icon: Facebook },
-  { name: "Instagram", href: digititanLinks.instagram, Icon: Instagram },
-  { name: "TikTok", href: digititanLinks.tiktok, Icon: TikTokIcon },
-  { name: "LinkedIn", href: digititanLinks.linkedin, Icon: Linkedin },
+  { name: "Facebook", href: digititanLinks.facebook, logo: "/social/facebook.svg" },
+  { name: "Instagram", href: digititanLinks.instagram, logo: "/social/instagram.svg" },
+  { name: "TikTok", href: digititanLinks.tiktok, logo: "/social/tiktok.svg" },
+  { name: "LinkedIn", href: digititanLinks.linkedin, logo: "/social/linkedin.svg" },
 ];
 
 export default function Contact() {
@@ -85,10 +77,10 @@ export default function Contact() {
               ))}
 
               <div className="card">
-                <h3 className="font-bold text-lg text-burnt-600 mb-1">Follow Village NetAcad</h3>
+                <h3 className="font-bold text-lg text-burnt-600 mb-1">Our Social Media Handles</h3>
                 <p className="text-sm text-gray-400 mb-5">Stay connected with us on social media.</p>
                 <div className="grid grid-cols-2 gap-3">
-                  {socials.map(({ name, href, Icon }) => (
+                  {socials.map(({ name, href, logo }) => (
                     <a
                       key={name}
                       href={href}
@@ -96,8 +88,8 @@ export default function Contact() {
                       rel="noopener noreferrer"
                       className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-3 hover:border-burnt-600/40 hover:bg-burnt-800/20 transition-colors"
                     >
-                      <span className="w-10 h-10 rounded-lg bg-gradient-to-br from-burnt-400 to-primary-400 flex items-center justify-center flex-shrink-0 text-white">
-                        <Icon size={18} />
+                      <span className="w-10 h-10 rounded-lg bg-white flex items-center justify-center flex-shrink-0 p-1.5">
+                        <img src={logo} alt="" className="w-full h-full object-contain" />
                       </span>
                       <span className="text-sm font-semibold text-gray-200">{name}</span>
                     </a>

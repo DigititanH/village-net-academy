@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Sparkles, Zap } from "lucide-react";
 import { Link } from "react-router-dom";
+import { fontStyleFor } from "../lib/heroFonts";
 
 const INTERVAL_MS = 5000;
 
@@ -89,6 +90,8 @@ function SlideOverlay({ slide }) {
   const highlightColor = slide.title_highlight_color || "";
   const subtitleColor = slide.subtitle_color || "#F5F5F5";
   const bodyColor = slide.body_color || "#E5E5E5";
+  const titleFont = fontStyleFor(slide.title_font, slide.title_style, "display", "bold");
+  const textFont = fontStyleFor(slide.text_font, slide.text_style, "sans", "normal");
 
   return (
     <div
@@ -100,7 +103,7 @@ function SlideOverlay({ slide }) {
           className={`inline-flex max-w-full items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full mb-3 sm:mb-5 text-xs sm:text-sm font-semibold border border-white/25 bg-black/35 backdrop-blur-sm ${
             position.includes("left") ? "" : position.includes("right") ? "ml-auto" : ""
           }`}
-          style={{ color: labelColor }}
+          style={{ ...textFont, color: labelColor }}
         >
           <Sparkles size={14} className="text-accent-400 shrink-0" />
           <span className="min-w-0 break-words">{slide.label}</span>
@@ -110,7 +113,7 @@ function SlideOverlay({ slide }) {
       {(slide.title || slide.titleHighlight || slide.title_highlight) && (
         <h1
           className="text-2xl sm:text-4xl lg:text-5xl xl:text-6xl font-display font-bold leading-tight drop-shadow-lg break-words"
-          style={{ color: titleColor }}
+          style={{ ...titleFont, color: titleColor }}
         >
           {slide.title}{" "}
           {(slide.titleHighlight || slide.title_highlight) && (
@@ -127,7 +130,7 @@ function SlideOverlay({ slide }) {
       {slide.subtitle && (
         <p
           className={`mt-3 sm:mt-5 text-sm sm:text-lg leading-relaxed max-w-2xl drop-shadow break-words ${justify}`}
-          style={{ color: subtitleColor }}
+          style={{ ...textFont, color: subtitleColor }}
         >
           {slide.subtitle}
         </p>
@@ -136,7 +139,7 @@ function SlideOverlay({ slide }) {
       {slide.body && (
         <p
           className={`mt-3 sm:mt-4 text-xs sm:text-base leading-relaxed max-w-3xl break-words ${justify}`}
-          style={{ color: bodyColor }}
+          style={{ ...textFont, color: bodyColor }}
         >
           {slide.body}
         </p>

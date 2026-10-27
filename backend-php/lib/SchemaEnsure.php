@@ -75,6 +75,10 @@ class SchemaEnsure
                 'title_highlight_color' => "VARCHAR(20) NOT NULL DEFAULT ''",
                 'subtitle_color' => "VARCHAR(20) NOT NULL DEFAULT '#F5F5F5'",
                 'body_color' => "VARCHAR(20) NOT NULL DEFAULT '#E5E5E5'",
+                'title_font' => "VARCHAR(20) NOT NULL DEFAULT 'display'",
+                'title_style' => "VARCHAR(20) NOT NULL DEFAULT 'bold'",
+                'text_font' => "VARCHAR(20) NOT NULL DEFAULT 'sans'",
+                'text_style' => "VARCHAR(20) NOT NULL DEFAULT 'normal'",
             ];
             foreach ($cols as $name => $def) {
                 if (!self::columnExists($pdo, 'hero_slides', $name)) {
@@ -207,6 +211,21 @@ class SchemaEnsure
             }
             if (!self::columnExists($pdo, 'products', 'color_stock')) {
                 $pdo->exec('ALTER TABLE products ADD COLUMN color_stock TEXT DEFAULT NULL');
+            }
+            if (!self::columnExists($pdo, 'products', 'mustek_sku')) {
+                $pdo->exec('ALTER TABLE products ADD COLUMN mustek_sku VARCHAR(64) DEFAULT NULL');
+            }
+            if (!self::columnExists($pdo, 'products', 'mustek_cost')) {
+                $pdo->exec('ALTER TABLE products ADD COLUMN mustek_cost DECIMAL(10,2) DEFAULT NULL');
+            }
+            if (!self::columnExists($pdo, 'products', 'mustek_special')) {
+                $pdo->exec('ALTER TABLE products ADD COLUMN mustek_special TINYINT(1) NOT NULL DEFAULT 0');
+            }
+            if (!self::columnExists($pdo, 'products', 'mustek_synced_at')) {
+                $pdo->exec('ALTER TABLE products ADD COLUMN mustek_synced_at DATETIME DEFAULT NULL');
+            }
+            if (!self::columnExists($pdo, 'products', 'brand')) {
+                $pdo->exec('ALTER TABLE products ADD COLUMN brand VARCHAR(80) DEFAULT NULL');
             }
             $pdo->exec("INSERT IGNORE INTO categories (name, slug) VALUES ('Merchandise', 'merchandise')");
             $pdo->exec("INSERT IGNORE INTO categories (name, slug) VALUES ('Electronics', 'electronics')");

@@ -66,7 +66,7 @@ export default function TrainingAcademy() {
         title="Digititan Centres network"
         titleBrand
         compact
-        subtitle="Select a province on the map to see Digititan Centres across South Africa."
+        subtitle="Select a province on the map to explore the Cisco Networking Academies across South Africa"
       />
 
       {/* Map first — primary view after the page header */}
